@@ -629,7 +629,7 @@ func (a *App) AIStatus() (syncproto.AIStatus, error) {
 }
 
 func (a *App) AIChat(req syncproto.AIChatRequest) (syncproto.AIChatResponse, error) {
-	c, ctx, cancel, err := a.serverCall(3 * time.Minute)
+	c, ctx, cancel, err := a.serverCall(6 * time.Minute)
 	if err != nil {
 		return syncproto.AIChatResponse{}, err
 	}
@@ -656,7 +656,7 @@ func (a *App) ActionsConfigure(enabled bool, names []string) (syncproto.ActionsS
 }
 
 func (a *App) ActionsScan(entryID string) (syncproto.ActionsScanResponse, error) {
-	c, ctx, cancel, err := a.serverCall(5 * time.Minute)
+	c, ctx, cancel, err := a.serverCall(20 * time.Minute)
 	if err != nil {
 		return syncproto.ActionsScanResponse{}, err
 	}

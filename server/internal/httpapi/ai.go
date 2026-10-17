@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"diary/server/internal/core"
@@ -12,12 +13,12 @@ import (
 
 func aiOff(w http.ResponseWriter) {
 	writeJSON(w, http.StatusNotFound, syncproto.ErrorResponse{Error: "ai_disabled",
-		Message: "The AI assistant is off. Set DIARY_GEMINI_API_KEY on the server to turn it on."})
+		Message: "The AI assistant is off. Set DIARY_OLLAMA_URL (a local model) or DIARY_GEMINI_API_KEY on the server to turn it on."})
 }
 
 func (h *Handler) aiUnavailable(w http.ResponseWriter, err error) {
-	h.deps.Log.Warn("gemini", "err", err)
-	writeJSON(w, http.StatusBadGateway, syncproto.ErrorResponse{Error: "ai_unavailable", Message: "Gemini didn't answer. Try again in a moment."})
+	h.deps.Log.Warn("ai model", "err", err)
+	writeJSON(w, http.StatusBadGateway, syncproto.ErrorResponse{Error: "ai_unavailable", Message: "The AI model didn't answer. " + errorDetail(err)})
 }
 
 // aiStatus also creates the action-item settings on first use, which enrolls
@@ -35,8 +36,8 @@ func (h *Handler) aiChat(w http.ResponseWriter, r *http.Request) {
 		aiOff(w)
 		return
 	}
-	// Tool calls can take a while: lift the server's 30 s write timeout.
-	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(3 * time.Minute))
+	// Tool calls (and a local model thinking) take a while: lift the server's 30 s write timeout.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(6 * time.Minute))
 	var req syncproto.AIChatRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
 		h.writeError(w, r, &core.ValidationError{Fields: map[string]string{"messages": "must be JSON"}})
@@ -96,7 +97,7 @@ func (h *Handler) actionsScan(w http.ResponseWriter, r *http.Request) {
 		aiOff(w)
 		return
 	}
-	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(5 * time.Minute))
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(20 * time.Minute))
 	var req syncproto.ActionsScanRequest
 	if r.ContentLength != 0 {
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&req); err != nil {
@@ -115,4 +116,14 @@ func (h *Handler) actionsScan(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusOK, res)
 	}
+}
+
+// errorDetail keeps the useful part of a model error ("model isn't installed",
+// "can't reach Ollama") for the person reading it.
+func errorDetail(err error) string {
+	msg := strings.TrimPrefix(err.Error(), core.ErrAIUnavailable.Error()+": ")
+	if msg == err.Error() || len(msg) > 200 {
+		return "Try again in a moment."
+	}
+	return strings.ToUpper(msg[:1]) + msg[1:] + "."
 }

@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { Button, inputClass } from "@/components/ui";
 import { useAiStatus } from "@/features/ai/AskPanel";
 import { openAsk } from "@/features/ai/askBus";
+import { aiName, aiPrivacy } from "@/features/ai/aiName";
 import { relativeTime } from "@/lib/dates";
 import { store } from "@platform";
 import type { NotificationPermission, ReminderSettings } from "@/platform/types";
@@ -30,7 +31,7 @@ function Toggle({ checked, onChange, label, hint }: { checked: boolean; onChange
   );
 }
 
-export function GeminiSection() {
+export function AiSection() {
   const qc = useQueryClient();
   const { data: ai, isPending } = useAiStatus();
   const actions = useQuery({ queryKey: ["ai-actions"], queryFn: () => store.ai.actionsStatus(), enabled: !!ai?.enabled, retry: false });
@@ -66,23 +67,22 @@ export function GeminiSection() {
 
   if (isPending) {
     return (
-      <Card id="gemini" title="Gemini">
+      <Card id="ai" title="AI assistant">
         <p className="text-sm text-muted">Checking…</p>
       </Card>
     );
   }
   if (!ai?.enabled) {
     return (
-      <Card id="gemini" title="Gemini">
+      <Card id="ai" title="AI assistant">
         <div className="flex flex-col gap-2 text-sm">
-          <p>Ask questions about your notes and get your action items on your calendar, with Google's Gemini. One-time setup on the server:</p>
+          <p>Ask questions about your notes and get your action items on your calendar, with Claude. One-time setup on the server:</p>
           <ol className="list-decimal space-y-1 pl-5 text-muted">
             <li>
-              In Google AI Studio (aistudio.google.com), choose <span className="text-ink">Get API key → Create API key</span>. Turn on billing for the key's
-              project if you can: on the free tier Google may use what you send to improve its products.
+              In the Anthropic Console (console.anthropic.com), add billing credit and create a key under <span className="text-ink">Settings → API keys</span>.
             </li>
             <li>
-              Put it in <code className="text-ink">deploy/.env</code> as <code className="text-ink">DIARY_GEMINI_API_KEY</code> and restart the server.
+              Put it in <code className="text-ink">deploy/.env</code> as <code className="text-ink">DIARY_ANTHROPIC_API_KEY</code> and restart the server.
             </li>
           </ol>
           {store.platform !== "web" && <p className="text-xs text-muted">Already set up? This app may just be offline from the server.</p>}
@@ -92,13 +92,13 @@ export function GeminiSection() {
   }
   const st = actions.data;
   return (
-    <Card id="gemini" title="Gemini">
+    <Card id="ai" title="AI assistant">
       <p className="text-sm">
-        Gemini ({ai.model}) answers questions about your notes. Open it from the sidebar or with <kbd className="font-sans">Ctrl+J</kbd>. Pages it reads are sent to
-        Google to answer; it never changes your notes.
+        {aiName(ai)} ({ai.model}) answers questions about your notes. Open it from the sidebar or with <kbd className="font-sans">Ctrl+J</kbd>. {aiPrivacy(ai)} It
+        never changes your notes.
       </p>
       <Button variant="outline" className="self-start" onClick={() => openAsk()}>
-        Ask Gemini
+        Ask {aiName(ai)}
       </Button>
 
       <div className="flex flex-col gap-3 border-t border-line pt-4">
@@ -108,7 +108,7 @@ export function GeminiSection() {
         ) : (
           <>
             <p className="text-sm text-muted">
-              Gemini reads your meeting notes and journal entries for tasks that are yours and have a due date, and files each in the{" "}
+              {aiName(ai)} reads your meeting notes and journal entries for tasks that are yours and have a due date, and files each in the{" "}
               <Link to={`/entry/${st.databaseId}`} className="text-accent underline underline-offset-2">
                 Action items
               </Link>{" "}

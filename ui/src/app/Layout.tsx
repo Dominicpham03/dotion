@@ -5,6 +5,7 @@ import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react
 import { SyncBadge } from "@/components/SyncBadge";
 import { IconButton } from "@/components/ui";
 import { AskPanel, useAiStatus } from "@/features/ai/AskPanel";
+import { aiName } from "@/features/ai/aiName";
 import { openAsk } from "@/features/ai/askBus";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
 import { seenCopies } from "@/lib/attention";
@@ -123,7 +124,7 @@ export function Layout() {
               <span className="opacity-80">
                 <Sparkles size={16} />
               </span>
-              <span className="flex-1 text-left">Ask Gemini</span>
+              <span className="flex-1 text-left">Ask {aiName(ai.data)}</span>
               <kbd className="hidden font-sans text-[11px] text-muted opacity-0 transition-opacity group-hover:opacity-100 md:inline">Ctrl+J</kbd>
             </button>
           )}

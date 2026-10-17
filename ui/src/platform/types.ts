@@ -206,11 +206,13 @@ export interface CalendarApi {
   events(start: string, end: string): Promise<{ connected: boolean; events: CalendarEvent[]; stale?: boolean }>;
 }
 
-// ---- Gemini assistant and action items (through the Dotion server; online only) ----
+// ---- AI assistant and action items (through the Dotion server; online only) ----
 
 export interface AiStatus {
-  enabled: boolean; // the server has a Gemini API key
+  enabled: boolean; // the server has an AI model configured
   model?: string;
+  provider?: "claude" | "ollama" | "gemini";
+  local?: boolean; // the model runs on the user's own machine
 }
 
 export interface AiMessage {
@@ -224,7 +226,7 @@ export interface AiSource {
   entryDate: string | null;
 }
 
-/** A page Gemini drafted; nothing is saved until the user creates it. */
+/** A page the assistant drafted; nothing is saved until the user creates it. */
 export interface AiProposal {
   title: string;
   markdown: string;

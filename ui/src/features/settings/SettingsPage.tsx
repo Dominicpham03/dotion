@@ -7,14 +7,14 @@ import { getEditorSize, getPalette, getTheme, setEditorSize, setPalette, setThem
 import { useSyncStatus } from "@/hooks/useSyncStatus";
 import { store } from "@platform";
 import { useCalendarStatus, useConnectCalendar } from "@/features/calendar/useCalendar";
-import { GeminiSection, NotificationsSection } from "./AiSettings";
+import { AiSection, NotificationsSection } from "./AiSettings";
 
 export function SettingsPage() {
   return (
     <div className="flex max-w-xl flex-col gap-8">
       <PageTitle>Settings</PageTitle>
       <Appearance />
-      <GeminiSection />
+      <AiSection />
       <CalendarSection />
       {store.notifications && <NotificationsSection />}
       <GitLabSection />

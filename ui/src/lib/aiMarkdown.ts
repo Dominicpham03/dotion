@@ -1,4 +1,4 @@
-// Renders Gemini's Markdown answers as HTML that is safe to insert: raw HTML
+// Renders the assistant's Markdown answers as HTML that is safe to insert: raw HTML
 // and images are shown as text, and links are either Dotion pages
 // ([Title](dotion:<id>)) or plain http(s) links opened outside the app.
 import { Marked, type Tokens } from "marked";

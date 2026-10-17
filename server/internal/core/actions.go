@@ -61,7 +61,7 @@ type ActionsService struct {
 	entries  *EntryService
 	model    ChatModel
 	ints     IntegrationStore
-	calendar CalendarWriter // nil when Google is not configured
+	calendar CalendarWriter   // nil when Google is not configured
 	Now      func() time.Time // replaceable in tests
 	log      *slog.Logger
 
@@ -328,11 +328,13 @@ var actionsSchema = map[string]any{
 					"due_date": map[string]any{"type": "string", "description": "YYYY-MM-DD"},
 					"quote":    map[string]any{"type": "string", "description": "The words in the note this comes from"},
 				},
-				"required": []string{"task", "due_date", "quote"},
+				"required":             []string{"task", "due_date", "quote"},
+				"additionalProperties": false,
 			},
 		},
 	},
-	"required": []string{"items"},
+	"required":             []string{"items"},
+	"additionalProperties": false,
 }
 
 const actionsSystem = `You find action items in a person's notes (meeting notes, journal entries, plans).
@@ -486,7 +488,7 @@ func (s *ActionsService) ensureDatabase(ctx context.Context, userID string, cfg 
 	meta, _ := json.Marshal(map[string]any{"icon": "✅", "schema": schema})
 	body, _ := json.Marshal(map[string]any{"type": "doc", "content": []any{
 		map[string]any{"type": "paragraph", "content": []any{map[string]any{"type": "text",
-			"text": "Tasks for you with a due date, found by Gemini in your notes. Each links to the note it came from. Set Status to Done when finished."}}},
+			"text": "Tasks for you with a due date, found by the AI assistant in your notes. Each links to the note it came from. Set Status to Done when finished."}}},
 	}})
 	req := syncproto.PutEntryRequest{BaseVersion: base, Kind: model.KindDatabase, Title: "Action items", Body: body, Meta: meta}
 	raw, _ := json.Marshal(req)

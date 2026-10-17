@@ -185,8 +185,10 @@ type GitLabSyncResponse struct {
 
 // AIStatus is the body of GET /v1/ai.
 type AIStatus struct {
-	Enabled bool   `json:"enabled"` // the server has a Gemini API key
-	Model   string `json:"model,omitempty"`
+	Enabled  bool   `json:"enabled"` // the server has an AI model configured
+	Model    string `json:"model,omitempty"`
+	Provider string `json:"provider,omitempty"` // "claude", "ollama" or "gemini"
+	Local    bool   `json:"local"`              // the model runs on the user's own machine
 }
 
 // AIMessage is one turn of an assistant conversation. Role is "user" or "model".

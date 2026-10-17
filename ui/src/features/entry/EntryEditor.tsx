@@ -7,6 +7,7 @@ import { Banner, Button, MenuItem, MoreMenu } from "@/components/ui";
 import { DiaryEditor } from "@/editor/DiaryEditor";
 import { useAiStatus } from "@/features/ai/AskPanel";
 import { openAsk } from "@/features/ai/askBus";
+import { aiName } from "@/features/ai/aiName";
 import { ActionScanBanner, type ScanState } from "@/features/ai/ActionScanBanner";
 import { RecordProperties } from "@/features/database/RecordProperties";
 import { IconPicker } from "@/features/pages/IconPicker";
@@ -223,7 +224,7 @@ export function EntryEditor({ entry, id, entryDate, parentId = entry?.parentId ?
       )}
       {conflict && <ConflictBanner current={conflict.current} copy={conflict.copy} onDismiss={() => setConflict(null)} />}
       {notice && <Banner>{notice}</Banner>}
-      {scan && <ActionScanBanner state={scan} onDismiss={() => setScan(null)} />}
+      {scan && <ActionScanBanner state={scan} name={aiName(ai.data)} onDismiss={() => setScan(null)} />}
 
       {confirmDelete && (
         <Banner
@@ -260,7 +261,7 @@ export function EntryEditor({ entry, id, entryDate, parentId = entry?.parentId ?
                             openAsk({ prompt: "Summarize this page", send: true });
                           }}
                         >
-                          Summarize with Gemini
+                          Summarize with {aiName(ai.data)}
                         </MenuItem>
                         <MenuItem
                           icon={<ListChecks size={15} />}

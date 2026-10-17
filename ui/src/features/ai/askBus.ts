@@ -1,4 +1,4 @@
-// Opens the Ask Gemini panel from anywhere (sidebar, Ctrl+J, page menus).
+// Opens the Ask AI panel from anywhere (sidebar, Ctrl+J, page menus).
 type Request = { prompt?: string; send?: boolean };
 const subs = new Set<(r: Request) => void>();
 

@@ -36,6 +36,11 @@ type ChatModel interface {
 	Extract(ctx context.Context, system, prompt string, schema map[string]any) (json.RawMessage, error)
 }
 
+// SystemVolatileMark separates the fixed part of the system prompt from the
+// part that changes per request (the time, the open page), so adapters can
+// cache the fixed part. It reads naturally for models that don't split.
+const SystemVolatileMark = "\n\n## Right now\n"
+
 // ErrAIUnavailable wraps failures talking to the model provider.
 var ErrAIUnavailable = errors.New("the AI service didn't answer")
 
@@ -59,6 +64,8 @@ type AssistantService struct {
 	calendar CalendarProvider // nil when Google is not configured
 	drive    DriveProvider
 	actions  *ActionsService
+	// Provider names where the model runs: "ollama" (this machine), "claude" or "gemini".
+	Provider string
 }
 
 func NewAssistantService(entries *EntryService, model ChatModel, ints IntegrationStore, calendar CalendarProvider, drive DriveProvider, actions *ActionsService) *AssistantService {
@@ -70,7 +77,7 @@ func (s *AssistantService) Status() syncproto.AIStatus {
 	if s == nil || s.model == nil {
 		return syncproto.AIStatus{}
 	}
-	return syncproto.AIStatus{Enabled: true, Model: s.model.Model()}
+	return syncproto.AIStatus{Enabled: true, Model: s.model.Model(), Provider: s.Provider, Local: s.Provider == "ollama"}
 }
 
 // Chat answers the last user message of req.
@@ -162,7 +169,8 @@ Rules:
 - To create a page, call propose_page. It only shows the user a draft they can accept; say so briefly. You cannot edit or delete anything.
 - Be concise. Use Markdown: short paragraphs, lists, **bold** for key facts.
 `)
-	fmt.Fprintf(&b, "\nNow: %s (%s).\n", t.now.Format("Monday, 2 January 2006, 15:04 -07:00"), t.now.Format("2006-01-02"))
+	b.WriteString(SystemVolatileMark) // everything after this changes per request
+	fmt.Fprintf(&b, "Now: %s (%s).\n", t.now.Format("Monday, 2 January 2006, 15:04 -07:00"), t.now.Format("2006-01-02"))
 	if !t.hasCalendar {
 		b.WriteString("Google Calendar is not connected.\n")
 	}

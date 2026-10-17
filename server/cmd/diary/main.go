@@ -14,10 +14,12 @@ import (
 	"time"
 
 	"diary/server/internal/adapters/auth"
+	"diary/server/internal/adapters/claude"
 	"diary/server/internal/adapters/gemini"
 	"diary/server/internal/adapters/gitlab"
 	"diary/server/internal/adapters/google"
 	"diary/server/internal/adapters/memnotifier"
+	"diary/server/internal/adapters/ollama"
 	"diary/server/internal/adapters/sqlitestore"
 	"diary/server/internal/backup"
 	"diary/server/internal/config"
@@ -97,16 +99,32 @@ func run(cfg config.Config) error {
 	gl := core.NewGitLabService(entries, store, store, gitlab.New())
 	entries.OnPut = gl.Changed // a status change in Dotion is sent to GitLab
 
-	// The AI assistant and action items stay off without a Gemini key.
-	var actions *core.ActionsService
-	var assistant *core.AssistantService
-	if cfg.GeminiAPIKey != "" {
-		model, err := gemini.New(ctx, cfg.GeminiAPIKey, cfg.GeminiModel, "")
+	// The AI assistant and action items stay off without a model: Claude,
+	// a local one through Ollama, or Gemini (first one configured wins).
+	var model core.ChatModel
+	provider := ""
+	switch {
+	case cfg.AnthropicAPIKey != "":
+		model, provider = claude.New(cfg.AnthropicAPIKey, cfg.AnthropicModel, ""), "claude"
+	case cfg.OllamaURL != "":
+		o := ollama.New(cfg.OllamaURL, cfg.OllamaModel, cfg.OllamaContext)
+		if err := o.Ping(ctx); err != nil {
+			log.Warn("ollama not ready yet; the assistant will retry on each request", "err", err)
+		}
+		model, provider = o, "ollama"
+	case cfg.GeminiAPIKey != "":
+		g, err := gemini.New(ctx, cfg.GeminiAPIKey, cfg.GeminiModel, "")
 		if err != nil {
 			return fmt.Errorf("gemini: %w", err)
 		}
+		model, provider = g, "gemini"
+	}
+	var actions *core.ActionsService
+	var assistant *core.AssistantService
+	if model != nil {
 		actions = core.NewActionsService(entries, model, store, calendarWriter, log)
 		assistant = core.NewAssistantService(entries, model, store, calendar, drive, actions)
+		assistant.Provider = provider
 	}
 	handler := httpapi.New(httpapi.Deps{
 		Entries:       entries,
@@ -158,7 +176,7 @@ func run(cfg config.Config) error {
 		close(done)
 	}()
 
-	log.Info("listening", "addr", cfg.Addr, "auth", cfg.AuthMode, "data_dir", cfg.DataDir, "version", version, "google_calendar", calendar != nil, "gemini", assistant != nil)
+	log.Info("listening", "addr", cfg.Addr, "auth", cfg.AuthMode, "data_dir", cfg.DataDir, "version", version, "google_calendar", calendar != nil, "ai", provider)
 	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("server: %w", err)
 	}

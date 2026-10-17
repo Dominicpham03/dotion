@@ -11,12 +11,12 @@ export type ScanState =
   | { status: "error"; message: string };
 
 /** The outcome of "Find my action items" on a page. */
-export function ActionScanBanner({ state, onDismiss }: { state: ScanState; onDismiss: () => void }) {
+export function ActionScanBanner({ state, name, onDismiss }: { state: ScanState; name: string; onDismiss: () => void }) {
   if (state.status === "running") {
     return (
       <Banner>
         <span className="flex items-center gap-2" role="status">
-          <ListChecks size={15} className="animate-pulse text-accent" /> Gemini is reading this page for your action items…
+          <ListChecks size={15} className="animate-pulse text-accent" /> {name} is reading this page for your action items…
         </span>
       </Banner>
     );

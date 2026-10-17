@@ -9,7 +9,7 @@ Dotion is a self-hosted notes app and diary, in the spirit of Notion. You run on
 - **Integrations (optional):**
   - **Google Calendar and Drive:** your events show next to your notes, and you can import a Google Doc as a page.
   - **GitLab:** the issues assigned to you sync both ways.
-  - **Gemini:** an assistant that answers questions about your notes and turns tasks in meeting notes into action items on your calendar.
+  - **AI assistant (Claude):** answers questions about your notes, and turns tasks in meeting notes into action items on your calendar.
 - **Android reminders** for due dates, calendar events and a daily nudge to write.
 - **Your data stays yours:** one SQLite file on your server, with nightly backups and a one-click export to Markdown.
 
@@ -19,10 +19,10 @@ Dotion is a self-hosted notes app and diary, in the spirit of Notion. You run on
  Web browser ─┐
  Desktop app ─┼──►  Dotion server (Docker)  ──►  diary.db (SQLite) + nightly backups
  Android app ─┘          │
-                         └──► Google, GitLab, Gemini (only if you connect them)
+                         └──► Google, GitLab, Claude (only if you connect them)
 ```
 
-The server holds your notes and every connection to an outside service. You connect Google, GitLab or Gemini once, on the server, and every device can use it. The desktop and Android apps keep a full copy of your notes, so they work offline and sync whenever they can reach the server.
+The server holds your notes and every connection to an outside service. You connect Google, GitLab or Claude once, on the server, and every device can use it. The desktop and Android apps keep a full copy of your notes, so they work offline and sync whenever they can reach the server.
 
 There are two ways to run the server:
 
@@ -155,7 +155,7 @@ Each of these is set up once on the server, then works on every device. After ch
 
 ### Google Calendar and Drive
 
-Shows your calendar events on each day, lets you search Google Drive and import a Google Doc as a page, and adds your [action items](#gemini) to your calendar.
+Shows your calendar events on each day, lets you search Google Drive and import a Google Doc as a page, and adds your [action items](#ai-assistant-claude) to your calendar.
 
 1. In [Google Cloud Console](https://console.cloud.google.com), create a project and enable the **Google Calendar API** and the **Google Drive API**.
 2. Under **APIs & Services → OAuth consent screen**, choose **External** and add yourself as a test user.
@@ -179,33 +179,38 @@ The issues and merge requests assigned to you appear in a **GitLab** database, s
 1. In GitLab, go to your avatar → **Edit profile → Access tokens** and create a token with the **api** scope.
 2. In Dotion, open **Settings → GitLab** and enter your GitLab address (gitlab.com, or your own) and the token.
 
-### Gemini
+### AI assistant (Claude)
 
-With a Gemini API key, Dotion adds two features:
+With an AI model connected, Dotion adds two features. The server talks to the model; the web, desktop and Android apps need nothing extra.
 
-- **Ask Gemini**: open it from the sidebar or with Ctrl+J.
-  - Ask about anything you wrote. Gemini searches your notes, databases, Calendar and Drive, and links the pages it used.
+- **Ask Claude**: open it from the sidebar or with Ctrl+J.
+  - Ask about anything you wrote. Claude searches your notes, databases, Calendar and Drive, and links the pages it used.
   - It can draft a page for you to create. It never edits or deletes anything.
+  - Every page's **⋯** menu also has **Summarize with Claude**.
 - **Action items**:
-  - Gemini reads your meeting notes and journal entries for tasks that are **yours** and **have a due date**, such as "Sam to send the budget by Friday" or "I'll book the venue next week".
+  - Claude reads your meeting notes and journal entries for tasks that are **yours** and **have a due date**, such as "Sam to send the budget by Friday" or "I'll book the venue next week".
   - Each task becomes a record in an **Action items** database (To do / Done, due date, a link back to the note) and an all-day event on your Google Calendar.
   - Notes are read once you've stopped editing them; the server checks every 15 minutes. To read a page right away, use **⋯ → Find my action items** on it.
 
 Setup:
 
-1. In [Google AI Studio](https://aistudio.google.com), choose **Get API key → Create API key**.
+1. In the [Anthropic Console](https://console.anthropic.com), add billing credit, then create a key under **Settings → API keys**.
 2. **Edit `deploy/.env`:**
 
    ```ini
-   DIARY_GEMINI_API_KEY=...
-   # DIARY_GEMINI_MODEL=gemini-3.8-flash      (the default)
+   DIARY_ANTHROPIC_API_KEY=sk-ant-...
+   # DIARY_ANTHROPIC_MODEL=claude-opus-5-5     (the default; claude-sonnet-5-5 or claude-haiku-5-5 cost less)
    ```
 
 3. Restart the server.
-4. In **Settings → Gemini**, add the names you go by in notes (for example "Sam, SK"), so Gemini knows which tasks are yours.
+4. In **Settings → AI assistant**, add the names you go by in notes (for example "Sam, SK"), so Claude knows which tasks are yours.
 5. If you connected Google before setting this up, choose **Reconnect Google** once, so Dotion may add events to your calendar.
 
-**Privacy:** the notes Gemini reads are sent to Google to answer. On Gemini's free tier, Google may use them to improve its products. Turning on billing for the key's Google Cloud project stops that. You can turn off automatic scanning in **Settings → Gemini**.
+**Cost:** you pay Anthropic per use. Questions are typically a few cents each with the default model. Automatic scanning reads each note you edit once. To cap spending, set a monthly limit in the Anthropic Console, or turn off automatic scanning in **Settings → AI assistant**.
+
+**Privacy:** the notes Claude reads are sent to Anthropic's API to answer. Anthropic doesn't train its models on API data.
+
+**Other models:** instead of Claude, set `DIARY_OLLAMA_URL` and `DIARY_OLLAMA_MODEL` to use a local model through [Ollama](https://ollama.com) (free and private, but it needs a strong GPU), or `DIARY_GEMINI_API_KEY` for Google's Gemini. If several are set, Claude wins, then Ollama, then Gemini.
 
 ## Configuration reference
 
@@ -220,8 +225,10 @@ All of these go in `deploy/.env`.
 | `DIARY_TOKEN_SECRET` | Local mode | Base64 of 32+ random bytes, used to sign sign-in tokens |
 | `DIARY_PUBLIC_URL` | Google | The address you open Dotion at; used to build the Google redirect URI |
 | `DIARY_GOOGLE_CLIENT_ID`, `DIARY_GOOGLE_CLIENT_SECRET` | Google | The OAuth client from Google Cloud Console |
-| `DIARY_GEMINI_API_KEY` | Gemini | Key from Google AI Studio |
-| `DIARY_GEMINI_MODEL` | — | Gemini model (default `gemini-3.8-flash`) |
+| `DIARY_ANTHROPIC_API_KEY` | AI assistant | Key from the Anthropic Console |
+| `DIARY_ANTHROPIC_MODEL` | — | Claude model (default `claude-opus-5-5`) |
+| `DIARY_OLLAMA_URL`, `DIARY_OLLAMA_MODEL` | — | A local model instead (e.g. `http://host.docker.internal:11434`, `qwen3:14b`) |
+| `DIARY_GEMINI_API_KEY`, `DIARY_GEMINI_MODEL` | — | Google Gemini instead |
 | `DIARY_BACKUP_KEEP` | — | Nightly backups to keep (default 14) |
 | `DIARY_LOG_LEVEL` | — | `debug`, `info` (default), `warn` or `error` |
 
@@ -240,7 +247,7 @@ Database changes are applied automatically when the server starts. Rebuild the d
 - **"This account can't open this diary"** (Tailscale mode): `DIARY_OWNER_LOGIN` doesn't match your Tailscale login exactly.
 - **The phone can't reach the server:** check that Tailscale is connected on the phone, and that the address starts with `https://`.
 - **Google says "redirect_uri_mismatch":** the redirect URI in Google Cloud Console must match the one shown in **Settings → Google Calendar & Drive** exactly.
-- **Gemini doesn't show up:** `DIARY_GEMINI_API_KEY` isn't set, or the server wasn't restarted. On the apps, the assistant also needs a connection to the server.
+- **The AI assistant doesn't show up:** `DIARY_ANTHROPIC_API_KEY` isn't set, or the server wasn't restarted. When Claude can't answer, the Ask panel says why (for example, a rejected key or no credit). On the apps, the assistant also needs a connection to the server.
 
 ## Development
 

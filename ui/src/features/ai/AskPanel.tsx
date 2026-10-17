@@ -9,6 +9,7 @@ import { openExternal } from "@/lib/external";
 import { createPageFromMarkdown } from "@/lib/pages";
 import { store } from "@platform";
 import type { AiMessage, AiProposal, AiReply } from "@/platform/types";
+import { aiName, aiPrivacy } from "./aiName";
 import { onOpenAsk } from "./askBus";
 
 export function useAiStatus() {
@@ -60,7 +61,7 @@ export function AskPanel() {
       const reply = await store.ai.chat(messages.slice(-40), await pageOnScreen(location.pathname));
       setTurns((ts) => ts.map((t, i) => (i === ts.length - 1 ? { ...t, reply } : t)));
     } catch (e) {
-      setError((e as Error).message || "Gemini didn't answer. Try again.");
+      setError((e as Error).message || "The assistant didn't answer. Try again.");
       setTurns((ts) => ts.slice(0, -1));
       setText(q);
     } finally {
@@ -112,13 +113,13 @@ export function AskPanel() {
     <aside
       className="fixed inset-y-0 right-0 z-40 flex w-full flex-col border-l border-line bg-surface font-sans shadow-2xl sm:w-[26rem]"
       role="complementary"
-      aria-label="Ask Gemini"
+      aria-label={`Ask ${aiName(status)}`}
       onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
     >
       <header className="flex items-center gap-2 border-b border-line px-4 py-3">
         <Sparkles size={17} className="text-accent" />
         <h2 className="flex-1 text-sm font-semibold">
-          Ask Gemini {status?.model && <span className="ml-1 text-xs font-normal text-muted">{status.model}</span>}
+          Ask {aiName(status)} {status?.model && <span className="ml-1 text-xs font-normal text-muted">{status.model}</span>}
         </h2>
         {turns.length > 0 && (
           <IconButton label="New conversation" onClick={() => (setTurns([]), setError(""))} disabled={busy}>
@@ -135,12 +136,12 @@ export function AskPanel() {
           <p className="text-sm text-muted">
             {store.platform !== "web" && status === undefined
               ? "Checking…"
-              : "Gemini isn't set up on your Dotion server, or the server can't be reached. See Settings → Gemini."}
+              : "The AI assistant isn't set up on your Dotion server, or the server can't be reached. See Settings → AI assistant."}
           </p>
         ) : turns.length === 0 ? (
           <div className="flex flex-col gap-3">
             <p className="text-sm text-muted">
-              Ask about anything you wrote. Gemini searches your notes and databases (and Calendar and Drive, when connected) and links the pages it used.
+              Ask about anything you wrote. {aiName(status)} searches your notes and databases (and Calendar and Drive, when connected) and links the pages it used.
             </p>
             <div className="flex flex-col gap-1.5">
               {(onPage ? [...SUGGESTIONS_PAGE, ...SUGGESTIONS.slice(0, 1)] : SUGGESTIONS).map((s) => (
@@ -188,7 +189,7 @@ export function AskPanel() {
               }
             }}
             placeholder={onPage ? "Ask about this page or your notes" : "Ask about your notes"}
-            aria-label="Message to Gemini"
+            aria-label={`Message to ${aiName(status)}`}
             className="max-h-40 min-h-[2.5rem] flex-1 resize-none rounded-xl border border-line bg-paper px-3 py-2 text-sm"
           />
           <IconButton label="Send" type="submit" disabled={busy || !text.trim()} className="!h-10 !w-10 rounded-xl bg-accent-strong text-on-accent hover:bg-accent-strong/90 hover:text-on-accent">
@@ -196,7 +197,7 @@ export function AskPanel() {
           </IconButton>
         </form>
       )}
-      <p className="px-4 pb-3 text-[11px] text-muted">Notes Gemini reads are sent to Google to answer. It can draft pages but never changes your notes.</p>
+      <p className="px-4 pb-3 text-[11px] text-muted">{aiPrivacy(status)} It can draft pages but never changes your notes.</p>
     </aside>,
     document.body,
   );

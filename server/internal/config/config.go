@@ -37,9 +37,15 @@ type Config struct {
 	// the request's own host is used.
 	PublicURL string
 
-	// Gemini (optional): turns on the AI assistant and action items.
-	GeminiAPIKey string
-	GeminiModel  string
+	// AI assistant and action items (optional), in order of preference when
+	// more than one is set: Claude, a local model through Ollama, Gemini.
+	AnthropicAPIKey string
+	AnthropicModel  string
+	OllamaURL       string
+	OllamaModel     string
+	OllamaContext   int
+	GeminiAPIKey    string
+	GeminiModel     string
 }
 
 // Load reads the configuration from the process environment.
@@ -67,8 +73,22 @@ func FromEnv(get func(string) string) (Config, error) {
 		GoogleClientSecret: get("DIARY_GOOGLE_CLIENT_SECRET"),
 		PublicURL:          strings.TrimRight(get("DIARY_PUBLIC_URL"), "/"),
 
-		GeminiAPIKey: strings.TrimSpace(get("DIARY_GEMINI_API_KEY")),
-		GeminiModel:  strings.TrimSpace(get("DIARY_GEMINI_MODEL")),
+		AnthropicAPIKey: strings.TrimSpace(get("DIARY_ANTHROPIC_API_KEY")),
+		AnthropicModel:  strings.TrimSpace(get("DIARY_ANTHROPIC_MODEL")),
+		OllamaURL:       strings.TrimRight(strings.TrimSpace(get("DIARY_OLLAMA_URL")), "/"),
+		OllamaModel:     strings.TrimSpace(get("DIARY_OLLAMA_MODEL")),
+		GeminiAPIKey:    strings.TrimSpace(get("DIARY_GEMINI_API_KEY")),
+		GeminiModel:     strings.TrimSpace(get("DIARY_GEMINI_MODEL")),
+	}
+	if v := get("DIARY_OLLAMA_CONTEXT"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 2048 {
+			return Config{}, fmt.Errorf("DIARY_OLLAMA_CONTEXT must be a number of tokens, at least 2048")
+		}
+		cfg.OllamaContext = n
+	}
+	if cfg.OllamaURL != "" && !strings.HasPrefix(cfg.OllamaURL, "http://") && !strings.HasPrefix(cfg.OllamaURL, "https://") {
+		return Config{}, fmt.Errorf("DIARY_OLLAMA_URL must start with http:// (e.g. http://host.docker.internal:11434)")
 	}
 	if (cfg.GoogleClientID == "") != (cfg.GoogleClientSecret == "") {
 		return Config{}, fmt.Errorf("set both DIARY_GOOGLE_CLIENT_ID and DIARY_GOOGLE_CLIENT_SECRET, or neither")
