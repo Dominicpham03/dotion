@@ -1,0 +1,40 @@
+# Go
+go.work.sum
+/bin/
+*.exe
+*.test
+coverage.out
+
+# Local data and secrets
+.data/
+*.db
+*.db-shm
+*.db-wal
+deploy/.env
+
+# UI
+node_modules/
+ui/dist/
+ui/src/platform/wailsjs/
+
+# Build output embedded into the Go binaries (placeholder index.html stays tracked)
+server/internal/webui/dist/*
+!server/internal/webui/dist/index.html
+desktop/frontend/dist/*
+!desktop/frontend/dist/index.html
+desktop/build/bin/
+
+# Android: web assets copied in by `npm run build:mobile` / `cap sync`
+mobile/www/
+
+# Android build output and generated files (see also mobile/android/.gitignore)
+mobile/android/app/src/main/assets/public/
+mobile/android/capacitor-cordova-android-plugins/
+mobile/android/app/src/main/assets/capacitor.config.json
+mobile/android/app/src/main/assets/capacitor.plugins.json
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

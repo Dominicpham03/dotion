@@ -1,0 +1,396 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dotion colorway: navy #1b263b and slate blue #415a77. Tokens are RGB
+   triples so Tailwind can add alpha.
+   --accent        links and accent text (readable on --paper and --accent-soft)
+   --accent-strong filled buttons and markers, with --on-accent text */
+:root {
+  --paper: 244 246 249; /* near-white with a hint of navy */
+  --surface: 255 255 255;
+  --ink: 27 38 59; /* #1b263b */
+  --muted: 88 102 125;
+  --line: 216 222 231;
+  --accent: 65 90 119; /* #415a77 */
+  --accent-soft: 225 231 239;
+  --accent-strong: 65 90 119; /* #415a77 */
+  --on-accent: 255 255 255;
+  --warn: 140 90 10;
+  --warn-soft: 251 241 220;
+  --danger: 170 50 40;
+  --editor-size: 1.125rem;
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --paper: 27 38 59; /* #1b263b */
+  --surface: 34 47 71;
+  --ink: 224 225 221;
+  --muted: 160 172 190;
+  --line: 51 69 98;
+  --accent: 195 211 232; /* a pale tint of #415a77, so links stay readable on navy */
+  --accent-soft: 65 90 119; /* #415a77: selection and highlights */
+  --accent-strong: 65 90 119; /* #415a77 */
+  --on-accent: 240 242 245;
+  --warn: 230 180 90;
+  --warn-soft: 72 60 34;
+  --danger: 240 140 125;
+  color-scheme: dark;
+}
+
+:root {
+  --ring: 65 90 119;
+}
+[data-theme="dark"] {
+  --ring: 125 152 190;
+}
+
+/* Plum colorway: #393646, #4F4557, #6D5D6E and cream #F4EEE0.
+   Light uses the cream as paper; dark uses #393646. */
+[data-palette="plum"]:not([data-theme="dark"]) {
+  --paper: 244 238 224; /* #F4EEE0 */
+  --surface: 251 248 241;
+  --ink: 57 54 70; /* #393646 */
+  --muted: 109 93 110; /* #6D5D6E */
+  --line: 224 214 200;
+  --accent: 79 69 87; /* #4F4557 */
+  --accent-soft: 232 222 216;
+  --accent-strong: 79 69 87; /* #4F4557 */
+  --on-accent: 244 238 224;
+  --warn-soft: 247 232 205;
+  --ring: 109 93 110;
+}
+[data-palette="plum"][data-theme="dark"] {
+  --paper: 57 54 70; /* #393646 */
+  --surface: 68 63 81;
+  --ink: 244 238 224; /* #F4EEE0 */
+  --muted: 190 176 186;
+  --line: 88 79 98;
+  --accent: 222 205 216; /* a pale tint of #6D5D6E, readable on #393646 */
+  --accent-soft: 79 69 87; /* #4F4557 */
+  --accent-strong: 109 93 110; /* #6D5D6E */
+  --on-accent: 244 238 224;
+  --ring: 190 170 192;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+::selection {
+  background: rgb(var(--accent-strong) / 0.35);
+}
+
+/* ---- form controls in the Dotion palette ---- */
+input[type="checkbox"] {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  margin: 0;
+  border: 1.5px solid rgb(var(--muted) / 0.55);
+  border-radius: 0.3rem;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 120ms, border-color 120ms;
+}
+input[type="checkbox"]::before {
+  content: "";
+  width: 0.6rem;
+  height: 0.6rem;
+  background: rgb(var(--on-accent));
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+  transform: scale(0);
+  transition: transform 120ms;
+}
+input[type="checkbox"]:hover {
+  border-color: rgb(var(--accent-strong));
+}
+input[type="checkbox"]:checked {
+  background: rgb(var(--accent-strong));
+  border-color: rgb(var(--accent-strong));
+}
+input[type="checkbox"]:checked::before {
+  transform: scale(1);
+}
+
+input[type="date"] {
+  font-variant-numeric: tabular-nums;
+}
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.5;
+  cursor: pointer;
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 0.9;
+}
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.85);
+}
+/* An empty date shows nothing until you focus it (no "mm/dd/yyyy" noise). */
+input[type="date"][value=""]:not(:focus)::-webkit-datetime-edit {
+  color: transparent;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* thin, quiet scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--line)) transparent;
+}
+
+body {
+  @apply bg-paper text-ink font-sans antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid rgb(var(--ring));
+  outline-offset: 2px;
+}
+/* Inputs inside tables and panels get an inset ring instead. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline-offset: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* ---- editor ---- */
+.diary-prose {
+  @apply font-serif text-ink;
+  font-size: var(--editor-size);
+  line-height: 1.75;
+}
+/* Text keeps a readable measure; tables, images and database views use the full width. */
+.diary-prose > :is(p, h1, h2, h3, ul, ol, blockquote, pre, hr) {
+  max-width: 68ch;
+}
+.diary-prose:focus {
+  outline: none;
+}
+.diary-prose > * + * {
+  margin-top: 0.85em;
+}
+.diary-prose > h1 {
+  @apply text-2xl font-semibold;
+}
+.diary-prose > h2 {
+  @apply text-xl font-semibold;
+}
+.diary-prose > h3 {
+  @apply text-lg font-semibold;
+}
+.diary-prose ul {
+  @apply list-disc pl-6;
+}
+.diary-prose ol {
+  @apply list-decimal pl-6;
+}
+.diary-prose blockquote {
+  @apply border-l-2 border-line pl-4 text-muted italic;
+}
+.diary-prose code {
+  @apply rounded bg-accent-soft px-1 font-mono text-[0.9em];
+}
+.diary-prose pre {
+  @apply rounded-md bg-accent-soft p-3 font-mono text-sm;
+}
+/* Links in your writing only, not inside embedded database views. */
+.diary-prose :is(p, li, h1, h2, h3, blockquote, td, th) a:not(.page-link) {
+  @apply text-accent underline underline-offset-2;
+}
+.diary-prose hr {
+  @apply border-line;
+}
+.diary-prose ul[data-type="taskList"] {
+  @apply list-none pl-0;
+}
+.diary-prose ul[data-type="taskList"] li {
+  @apply flex items-start gap-2;
+}
+.diary-prose ul[data-type="taskList"] li > label {
+  @apply mt-[0.35em] select-none;
+}
+.diary-prose ul[data-type="taskList"] li > div {
+  @apply flex-1;
+}
+.diary-prose ul[data-type="taskList"] li[data-checked="true"] > div {
+  @apply text-muted line-through;
+}
+.diary-prose p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  @apply pointer-events-none float-left h-0 text-muted;
+}
+
+/* ---- select option colors (light, then dark) ---- */
+:root {
+  --opt-gray: 230 230 226;
+  --opt-brown: 238 224 212;
+  --opt-orange: 250 222 201;
+  --opt-yellow: 250 237 196;
+  --opt-green: 214 236 220;
+  --opt-blue: 214 228 246;
+  --opt-purple: 232 222 245;
+  --opt-pink: 246 220 233;
+  --opt-red: 248 214 210;
+  --code-kw: 160 60 120;
+  --code-str: 40 120 70;
+  --code-num: 170 90 20;
+  --code-com: 120 125 135;
+  --code-fn: 50 90 170;
+}
+[data-theme="dark"] {
+  --opt-gray: 68 70 76;
+  --opt-brown: 84 66 52;
+  --opt-orange: 102 64 34;
+  --opt-yellow: 96 82 30;
+  --opt-green: 40 84 56;
+  --opt-blue: 40 66 104;
+  --opt-purple: 74 56 104;
+  --opt-pink: 98 50 76;
+  --opt-red: 104 46 42;
+  --code-kw: 230 140 200;
+  --code-str: 140 210 150;
+  --code-num: 240 180 110;
+  --code-com: 140 146 158;
+  --code-fn: 140 180 245;
+}
+
+/* ---- rich blocks ---- */
+.diary-prose pre code {
+  @apply bg-transparent p-0;
+}
+.diary-prose .hljs-keyword,
+.diary-prose .hljs-built_in,
+.diary-prose .hljs-selector-tag,
+.diary-prose .hljs-literal {
+  color: rgb(var(--code-kw));
+}
+.diary-prose .hljs-string,
+.diary-prose .hljs-attr,
+.diary-prose .hljs-template-string {
+  color: rgb(var(--code-str));
+}
+.diary-prose .hljs-number,
+.diary-prose .hljs-type,
+.diary-prose .hljs-variable {
+  color: rgb(var(--code-num));
+}
+.diary-prose .hljs-comment,
+.diary-prose .hljs-quote {
+  color: rgb(var(--code-com));
+  font-style: italic;
+}
+.diary-prose .hljs-title,
+.diary-prose .hljs-function,
+.diary-prose .hljs-section {
+  color: rgb(var(--code-fn));
+}
+
+.diary-prose table.diary-table {
+  @apply my-4 w-full border-collapse font-sans text-[0.95rem];
+  table-layout: fixed;
+}
+.diary-prose .tableWrapper {
+  @apply overflow-x-auto;
+}
+.diary-prose table.diary-table th,
+.diary-prose table.diary-table td {
+  @apply border border-line px-2 py-1 align-top;
+}
+.diary-prose table.diary-table th {
+  @apply bg-accent-soft/50 text-left font-semibold;
+}
+.diary-prose table.diary-table p {
+  @apply m-0;
+}
+.diary-prose .selectedCell {
+  @apply bg-accent-soft;
+}
+
+.diary-prose img.diary-image {
+  @apply my-3 block h-auto max-w-full rounded-md border border-line;
+}
+.diary-prose img.diary-image.ProseMirror-selectednode {
+  @apply outline outline-2 outline-accent;
+}
+
+.diary-prose .page-link {
+  @apply rounded bg-accent-soft/60 px-1 font-sans text-[0.92em] text-accent no-underline hover:bg-accent-soft;
+}
+
+/* ---- Gemini answers (Ask panel) ---- */
+.ai-answer > * + * {
+  margin-top: 0.6em;
+}
+.ai-answer :is(ul, ol) {
+  padding-left: 1.25rem;
+}
+.ai-answer ul {
+  list-style: disc;
+}
+.ai-answer ol {
+  list-style: decimal;
+}
+.ai-answer li + li {
+  margin-top: 0.2em;
+}
+.ai-answer :is(h1, h2, h3, h4) {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.ai-answer a {
+  color: rgb(var(--accent));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ai-answer code {
+  border-radius: 0.25rem;
+  background: rgb(var(--ink) / 0.06);
+  padding: 0.05rem 0.3rem;
+  font-size: 0.85em;
+}
+.ai-answer pre {
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  background: rgb(var(--ink) / 0.06);
+  padding: 0.6rem 0.75rem;
+}
+.ai-answer pre code {
+  background: none;
+  padding: 0;
+}
+.ai-answer blockquote {
+  border-left: 3px solid rgb(var(--line));
+  padding-left: 0.75rem;
+  color: rgb(var(--muted));
+}
+.ai-answer table {
+  border-collapse: collapse;
+  font-size: 0.85em;
+}
+.ai-answer :is(th, td) {
+  border: 1px solid rgb(var(--line));
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+}

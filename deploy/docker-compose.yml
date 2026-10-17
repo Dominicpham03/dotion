@@ -1,0 +1,57 @@
+x-diary: &diary
+  build: { context: .., dockerfile: server/Dockerfile }
+  restart: unless-stopped
+  volumes: [diary-data:/data]
+  healthcheck:
+    test: ["CMD", "/diary", "healthcheck"]
+    interval: 30s
+    timeout: 3s
+
+services:
+  # ---- TLS_MODE=tailscale ------------------------------------------------
+  tailscale:
+    image: tailscale/tailscale:stable
+    profiles: [tailscale]
+    hostname: dotion                     # → https://dotion.<tailnet>.ts.net
+    restart: unless-stopped
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - ts-state:/var/lib/tailscale
+      - ./tailscale:/config:ro
+
+  diary-tailscale:
+    <<: *diary
+    profiles: [tailscale]
+    network_mode: service:tailscale      # shares the sidecar's network; unreachable otherwise
+    environment:
+      DIARY_ADDR: 127.0.0.1:8080
+      DIARY_AUTH_MODE: tailscale
+      DIARY_OWNER_LOGIN: ${DIARY_OWNER_LOGIN}
+      DIARY_GOOGLE_CLIENT_ID: ${DIARY_GOOGLE_CLIENT_ID:-}
+      DIARY_GOOGLE_CLIENT_SECRET: ${DIARY_GOOGLE_CLIENT_SECRET:-}
+      DIARY_GEMINI_API_KEY: ${DIARY_GEMINI_API_KEY:-}
+      DIARY_GEMINI_MODEL: ${DIARY_GEMINI_MODEL:-}
+      DIARY_PUBLIC_URL: ${DIARY_PUBLIC_URL:-}
+
+  # ---- TLS_MODE=off (this machine only) -----------------------------------
+  diary-local:
+    <<: *diary
+    profiles: ["off"]
+    ports: ["127.0.0.1:8080:8080"]       # host loopback only
+    environment:
+      DIARY_ADDR: 0.0.0.0:8080           # inside the container
+      DIARY_AUTH_MODE: password
+      DIARY_PASSWORD_HASH: ${DIARY_PASSWORD_HASH}
+      DIARY_TOKEN_SECRET: ${DIARY_TOKEN_SECRET}
+      DIARY_GOOGLE_CLIENT_ID: ${DIARY_GOOGLE_CLIENT_ID:-}
+      DIARY_GOOGLE_CLIENT_SECRET: ${DIARY_GOOGLE_CLIENT_SECRET:-}
+      DIARY_GEMINI_API_KEY: ${DIARY_GEMINI_API_KEY:-}
+      DIARY_GEMINI_MODEL: ${DIARY_GEMINI_MODEL:-}
+      DIARY_PUBLIC_URL: ${DIARY_PUBLIC_URL:-http://localhost:8080}
+
+volumes:
+  diary-data:
+  ts-state:

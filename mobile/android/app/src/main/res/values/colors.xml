@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dotion colorway: navy #1b263b, slate blue #415a77 -->
+<resources>
+    <color name="colorPrimary">#1B263B</color>
+    <color name="colorPrimaryDark">#1B263B</color>
+    <color name="colorAccent">#415A77</color>
+</resources>

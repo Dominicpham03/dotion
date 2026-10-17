@@ -1,0 +1,18 @@
+{
+  "appId": "app.dotion.notes",
+  "appName": "Dotion",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_dotion",
+      "iconColor": "#415A77"
+    }
+  }
+}
