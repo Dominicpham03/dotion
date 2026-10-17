@@ -266,3 +266,7 @@ mobile/    Android app (Capacitor) around the same UI
 ui/        React app, built for the web, desktop and Android
 deploy/    Docker Compose and Tailscale configuration
 ```
+
+## License
+
+[MIT](LICENSE)
