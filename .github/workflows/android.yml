@@ -56,11 +56,12 @@ jobs:
             ui/package-lock.json
             mobile/package-lock.json
 
-      - name: Set up the Android SDK
+      - name: Set up the Android SDK and install the packages we need
+        # packages must be set explicitly: the action's default list includes the
+        # obsolete "tools" package, which Google removed and which fails the build.
         uses: android-actions/setup-android@v4
-
-      - name: Install the compile SDK and build tools
-        run: sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+        with:
+          packages: "platform-tools platforms;android-34 build-tools;34.0.0"
 
       - name: Install UI dependencies
         working-directory: ui
