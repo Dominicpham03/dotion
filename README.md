@@ -1,5 +1,7 @@
 # Dotion
 
+[![Download the Android APK](https://img.shields.io/badge/Download-Android%20APK-3DDC84?logo=android&logoColor=white)](https://github.com/Dominicpham03/dotion/releases/download/latest/app-debug.apk)
+
 Dotion is a self-hosted notes app and diary, in the spirit of Notion. You run one small server on your own machine, and your notes sync to the web app, a Windows desktop app and an Android app. Both apps keep working offline.
 
 - **Daily entries** on a Today page and a calendar, plus free-standing **pages** nested as deep as you like.
@@ -127,6 +129,10 @@ wails build -nsis          # the installer appears in desktop/build/bin
 On first launch, enter your server address (`https://dotion.<your-tailnet>.ts.net`, or `http://localhost:8080`), or choose **Use offline for now**. Notes are stored in `%APPDATA%\Dotion\dotion.db`.
 
 ### Android app
+
+**The easy way — download a prebuilt APK.** Every push to `main` builds the app and publishes it here: **[download the latest APK](https://github.com/Dominicpham03/dotion/releases/download/latest/app-debug.apk)**. Open the file on your phone to install it (allow "Install unknown apps" for your browser or file manager when asked), then skip to step 3 below. Tagged versions (`v1.2.3`) also appear on the [Releases page](https://github.com/Dominicpham03/dotion/releases).
+
+**Or build it yourself:**
 
 ```sh
 cd ui && npm install && npm run build:mobile
