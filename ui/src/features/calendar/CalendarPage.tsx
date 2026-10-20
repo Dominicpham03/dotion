@@ -1,10 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
+import { Plus, X } from "lucide-react";
+import { useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
-import { PageTitle } from "@/components/ui";
+import { IconButton, PageTitle } from "@/components/ui";
 import { addMonths, isMonth, monthGrid, monthOf, monthRange, monthTitle, todayLocal, weekdayNames } from "@/lib/dates";
 import { store } from "@platform";
-import { ConnectCalendarPrompt } from "./CalendarParts";
+import { AddEventForm, ConnectCalendarPrompt, useCanAddEvents } from "./CalendarParts";
 import { useEvents } from "./useCalendar";
+import { useDueDates, type DueItem } from "./useDueDates";
 import type { EntrySummary } from "@/platform/types";
 
 /** Month grid. Days with entries get a dot whose size reflects word count,
@@ -21,6 +24,9 @@ export function CalendarPage() {
     enabled: isMonth(month),
   });
   const events = useEvents(from || today, to || today);
+  const dues = useDueDates(from || today, to || today);
+  const canAdd = useCanAddEvents();
+  const [addDay, setAddDay] = useState<string | null>(null);
 
   if (!isMonth(month)) return <Navigate to="/calendar" replace />;
 
@@ -69,13 +75,16 @@ export function CalendarPage() {
                 {week.map((day, j) => {
                   if (!day) return <td key={j} className="h-20 border border-line/60 bg-paper" />;
                   const entries = byDate.get(day) ?? [];
+                  const dueItems = dues.get(day) ?? [];
                   const words = entries.reduce((n, e) => n + e.words, 0);
                   const size = entries.length ? 6 + Math.round(12 * Math.sqrt(Math.min(1, words / maxWords))) : 0;
-                  const label = entries.length
-                    ? `${day}: ${entries.map((e) => e.title || "Untitled").join(", ")} (${words} words)`
-                    : `${day}: no entry`;
+                  const parts = [
+                    entries.length ? `${entries.map((e) => e.title || "Untitled").join(", ")} (${words} words)` : "",
+                    dueItems.length ? `due: ${dueItems.map((d) => d.title || "Untitled").join(", ")}` : "",
+                  ].filter(Boolean);
+                  const label = parts.length ? `${day}: ${parts.join(" · ")}` : `${day}: no entry`;
                   return (
-                    <td key={j} className="h-20 border border-line/60 bg-surface p-0 align-top">
+                    <td key={j} className="group relative h-20 border border-line/60 bg-surface p-0 align-top">
                       <Link
                         to={`/day/${day}`}
                         title={label}
@@ -87,9 +96,21 @@ export function CalendarPage() {
                         >
                           {Number(day.slice(8))}
                         </span>
+                        <DueChips items={dueItems} />
                         <EventChips events={events.byDay.get(day) ?? []} />
                         {size > 0 && <span className="self-center rounded-full bg-accent" style={{ width: size, height: size }} aria-hidden />}
                       </Link>
+                      {canAdd && (
+                        <button
+                          type="button"
+                          aria-label={`Add to ${day}`}
+                          title="Add to this day"
+                          onClick={() => setAddDay(day)}
+                          className="absolute right-1 top-1 hidden h-5 w-5 items-center justify-center rounded bg-surface text-muted shadow-sm hover:bg-accent-soft hover:text-accent group-hover:flex"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      )}
                     </td>
                   );
                 })}
@@ -98,7 +119,36 @@ export function CalendarPage() {
           </tbody>
         </table>
       </div>
+
+      {addDay && (
+        <div className="fixed inset-0 z-40 flex items-start justify-center bg-ink/30 p-4 pt-24" onClick={() => setAddDay(null)}>
+          <div className="w-full max-w-xl rounded-lg border border-line bg-surface p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="text-sm font-semibold">Add to {addDay}</h2>
+              <IconButton size="sm" label="Close" onClick={() => setAddDay(null)}>
+                <X size={16} />
+              </IconButton>
+            </div>
+            <AddEventForm day={addDay} autoFocus onDone={() => setAddDay(null)} />
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function DueChips({ items }: { items: DueItem[] }) {
+  if (!items.length) return null;
+  return (
+    <span className="flex flex-col gap-0.5" aria-label={`${items.length} ${items.length === 1 ? "due item" : "due items"}`}>
+      {items.slice(0, 2).map((d) => (
+        <span key={`${d.databaseId}:${d.id}`} className="flex items-center gap-1 truncate text-[11px] leading-tight text-accent">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent-strong" aria-hidden />
+          <span className="truncate">{d.title || "Untitled"}</span>
+        </span>
+      ))}
+      {items.length > 2 && <span className="text-[11px] text-muted">+{items.length - 2} more</span>}
+    </span>
   );
 }
 

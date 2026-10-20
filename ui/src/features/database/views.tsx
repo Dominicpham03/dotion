@@ -1,9 +1,10 @@
-import { PanelRightOpen, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { ChevronDown, EyeOff, PanelRightOpen, Plus, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { IconButton } from "@/components/ui";
 import { Link, useNavigate } from "react-router-dom";
 import { addMonths, isDate, monthGrid, monthOf, monthTitle, todayLocal, weekdayNames } from "@/lib/dates";
-import { formatValue, groupRecords, isEmpty, valueOf } from "@/lib/db";
+import { deleteProperty, formatValue, groupRecords, isEmpty, valueOf } from "@/lib/db";
 import type { Entry, PropertyDef, PropValue, ViewDef } from "@/platform/types";
 import { OptionChip, PropertyCell } from "./PropertyCell";
 import { PropIcon } from "./propIcons";
@@ -20,6 +21,99 @@ export type ViewProps = {
 const recordLink = (r: Entry) => `/entry/${r.id}`;
 
 // ---- table ------------------------------------------------------------------
+
+// A clickable column header with a dropdown: hide the column in this view, or
+// delete the property outright (stored values stay in each record). The menu is
+// rendered through a portal with fixed positioning so the table's overflow
+// containers can't clip it.
+function ColumnHeader({ api, view, prop }: { api: DatabaseApi; view: ViewDef; prop: PropertyDef }) {
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [menu, setMenu] = useState<{ left: number; top: number } | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  const center = prop.type === "checkbox";
+  const close = () => {
+    setMenu(null);
+    setConfirm(false);
+  };
+  const toggle = () => {
+    if (menu) return close();
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setMenu({ left: r.left, top: r.bottom + 4 });
+  };
+  return (
+    <span className={`flex items-center gap-1.5 ${center ? "justify-center" : ""}`}>
+      <PropIcon type={prop.type} />
+      <button
+        ref={btnRef}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={!!menu}
+        onClick={toggle}
+        className="group/col flex min-w-0 items-center gap-1 rounded px-1 py-0.5 hover:bg-ink/[0.06]"
+      >
+        <span className="truncate">{prop.name}</span>
+        <ChevronDown size={12} className="shrink-0 opacity-40 group-hover/col:opacity-100" />
+      </button>
+      {menu &&
+        createPortal(
+          <>
+            <button type="button" aria-label="Close menu" className="fixed inset-0 z-[60] cursor-default" onClick={close} />
+            <div
+              role="menu"
+              style={{ left: menu.left, top: menu.top }}
+              className="fixed z-[61] flex w-52 flex-col rounded-lg border border-line bg-surface p-1 text-left text-sm font-normal normal-case text-ink shadow-lg"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-ink/[0.06]"
+                onClick={() => {
+                  api.updateSchema((s) => ({
+                    ...s,
+                    views: s.views.map((v) => (v.id === view.id ? { ...v, hidden: [...(v.hidden ?? []), prop.id] } : v)),
+                  }));
+                  close();
+                }}
+              >
+                <EyeOff size={14} /> Hide in this view
+              </button>
+              {confirm ? (
+                <div className="flex flex-col gap-1 rounded bg-danger/5 p-1.5">
+                  <span className="px-1 text-xs text-muted">Delete this column? Values stay in each record.</span>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="flex-1 rounded px-2 py-1 text-xs font-medium text-danger hover:bg-danger/10"
+                      onClick={() => {
+                        api.updateSchema(deleteProperty(prop.id));
+                        close();
+                      }}
+                    >
+                      Delete
+                    </button>
+                    <button type="button" className="flex-1 rounded px-2 py-1 text-xs hover:bg-ink/[0.06]" onClick={() => setConfirm(false)}>
+                      Keep
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex items-center gap-2 rounded px-2 py-1.5 text-danger hover:bg-danger/10"
+                  onClick={() => setConfirm(true)}
+                >
+                  <Trash2 size={14} /> Delete column
+                </button>
+              )}
+            </div>
+          </>,
+          document.body,
+        )}
+    </span>
+  );
+}
 
 export function TableView({ api, view, records, createOption, newRecordProps }: ViewProps) {
   const [confirmFor, setConfirmFor] = useState<string | null>(null);
@@ -38,9 +132,7 @@ export function TableView({ api, view, records, createOption, newRecordProps }: 
               </th>
               {props.map((p) => (
                 <th key={p.id} className={`${head} min-w-40 border-l ${p.type === "checkbox" ? "min-w-24 text-center" : ""}`}>
-                  <span className={`flex items-center gap-1.5 ${p.type === "checkbox" ? "justify-center" : ""}`}>
-                    <PropIcon type={p.type} /> {p.name}
-                  </span>
+                  <ColumnHeader api={api} view={view} prop={p} />
                 </th>
               ))}
               <th className={`${head} w-12`} aria-label="Actions" />

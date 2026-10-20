@@ -44,6 +44,7 @@ export interface ViewDef {
   groupBy?: string; // board: a select or status property
   dateProperty?: string; // calendar
   filters: ViewFilter[];
+  filterOp?: "and" | "or"; // combine filters: match all (default) or match any
   sorts: ViewSort[];
   hidden?: string[]; // property ids hidden in this view
 }
@@ -57,6 +58,7 @@ export type PropValue = string | number | boolean | string[] | null;
 
 export interface EntryMeta {
   icon?: string; // an emoji
+  folder?: boolean; // a folder: a page that acts purely as a container for other pages/folders
   props?: Record<string, PropValue>; // database record values, by property id
   schema?: DatabaseSchema; // only on databases
 }
@@ -92,10 +94,12 @@ export interface EntrySummary {
   kind: EntryKind;
   parentId: EntryId | null;
   icon: string;
+  folder?: boolean; // true when this entry is a folder (a container)
   title: string;
   preview: string; // first ~140 characters of plain text
   words: number;
   updatedAt: string;
+  version?: number; // current version (needed to restore/purge from the trash)
 }
 
 export interface SearchHit {
@@ -204,6 +208,10 @@ export interface CalendarApi {
   disconnect(): Promise<void>;
   /** start and end are ISO instants in the viewer's time zone. */
   events(start: string, end: string): Promise<{ connected: boolean; events: CalendarEvent[]; stale?: boolean }>;
+  /** Adds an item to the primary ("general") calendar. All-day with `date`
+   *  (and optional `endDate` for a multi-day span), or a timed event with
+   *  `start`/`end` (RFC 3339, may cross days). Web only for now. */
+  addEvent?(input: { title: string; date?: string; endDate?: string; start?: string; end?: string; description?: string }): Promise<{ id: string; link?: string }>;
 }
 
 // ---- AI assistant and action items (through the Dotion server; online only) ----
@@ -329,8 +337,14 @@ export interface DiaryStore {
 
   saveEntry(draft: EntryDraft, baseVersion: number): Promise<SaveResult>;
   deleteEntry(id: EntryId, baseVersion: number): Promise<void>;
+  /** Trash (recoverable deletes; auto-emptied after 15 days). Web only for now. */
+  listTrash?(): Promise<EntrySummary[]>;
+  restoreEntry?(id: EntryId, baseVersion: number): Promise<void>;
+  purgeEntry?(id: EntryId, baseVersion: number): Promise<void>;
   /** Stores an image and returns its src ("/v1/blobs/<hash>"). */
   uploadImage(file: Blob): Promise<string>;
+  /** Stores any file (attachment) and returns its src ("/v1/blobs/<hash>"). Web only for now. */
+  uploadFile?(file: Blob): Promise<string>;
   /** Android: turns "/v1/blobs/<hash>" into a displayable URL (null: not downloaded yet). */
   resolveImage?(src: string): Promise<string | null>;
 

@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Field, PageTitle, inputClass } from "@/components/ui";
 import { relativeTime } from "@/lib/dates";
 import { getEditorSize, getPalette, getTheme, setEditorSize, setPalette, setTheme, type EditorSize, type Palette, type ThemeChoice } from "@/lib/theme";
+import { ALL_VIEW_TYPES, getDefaultViews, setDefaultViews, type ViewType } from "@/lib/dbprefs";
 import { useSyncStatus } from "@/hooks/useSyncStatus";
 import { store } from "@platform";
 import { useCalendarStatus, useConnectCalendar } from "@/features/calendar/useCalendar";
@@ -14,6 +15,7 @@ export function SettingsPage() {
     <div className="flex max-w-xl flex-col gap-8">
       <PageTitle>Settings</PageTitle>
       <Appearance />
+      <Databases />
       <AiSection />
       <CalendarSection />
       {store.notifications && <NotificationsSection />}
@@ -83,6 +85,45 @@ function Appearance() {
         }}
       />
       <p className="text-xs text-muted">Ctrl+Shift+L switches between light and dark.</p>
+    </Section>
+  );
+}
+
+const VIEW_LABELS: Record<ViewType, string> = { table: "Table", board: "Board", calendar: "Calendar" };
+
+function Databases() {
+  const [views, setViews] = useState<ViewType[]>(getDefaultViews());
+  const toggle = (t: ViewType) => {
+    // Keep at least one view selected (a database needs somewhere to show).
+    const next = views.includes(t) ? views.filter((v) => v !== t) : [...views, t];
+    const ordered = ALL_VIEW_TYPES.filter((v) => next.includes(v));
+    const final = ordered.length ? ordered : [t];
+    setViews(final);
+    setDefaultViews(final);
+  };
+  return (
+    <Section title="Databases">
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-1 text-sm font-medium">Views new databases start with</legend>
+        <div className="flex flex-wrap gap-2">
+          {ALL_VIEW_TYPES.map((t) => {
+            const on = views.includes(t);
+            return (
+              <label
+                key={t}
+                className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm ${on ? "border-accent bg-accent-soft text-accent" : "border-line"}`}
+              >
+                <input type="checkbox" checked={on} onChange={() => toggle(t)} className="sr-only" />
+                {VIEW_LABELS[t]}
+              </label>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted">
+          Applies to databases you create from now on. You can still add or delete views inside any database (the + beside the view
+          tabs, or the ⚙ view settings). Saved on this device.
+        </p>
+      </fieldset>
     </Section>
   );
 }

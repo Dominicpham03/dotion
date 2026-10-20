@@ -73,11 +73,11 @@ export function monthTitle(month: string): string {
   return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-/** Weeks of a month, Monday first; days outside the month are null. */
+/** Weeks of a month, Sunday first; days outside the month are null. */
 export function monthGrid(month: string): (string | null)[][] {
   const { from, to } = monthRange(month);
   const first = parseLocalDate(from);
-  const lead = (first.getDay() + 6) % 7; // Monday = 0
+  const lead = first.getDay(); // Sunday = 0
   const days: (string | null)[] = Array(lead).fill(null);
   for (let d = from; d <= to; d = addDays(d, 1)) days.push(d);
   while (days.length % 7) days.push(null);
@@ -86,13 +86,9 @@ export function monthGrid(month: string): (string | null)[][] {
   return weeks;
 }
 
+/** Column headers, Sunday first, to match monthGrid. */
 export function weekdayNames(): string[] {
-  const monday = new Date(2024, 0, 1); // a Monday
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(d.getDate() + i);
-    return d.toLocaleDateString(undefined, { weekday: "short" });
-  });
+  return ["Sun", "Mon", "Tues", "Wed", "Thu", "Fri", "Sat"];
 }
 
 /** "just now", "5 min ago", "3 h ago", or a date. */

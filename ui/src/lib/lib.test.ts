@@ -18,9 +18,9 @@ describe("dates", () => {
     expect(isDate("2026-02-30")).toBe(false);
     expect(isDate("26-1-1")).toBe(false);
   });
-  it("builds a Monday-first month grid", () => {
+  it("builds a Sunday-first month grid", () => {
     const weeks = monthGrid("2026-10"); // 1 October 2026 is a Thursday
-    expect(weeks[0]).toEqual([null, null, null, "2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"]);
+    expect(weeks[0]).toEqual([null, null, null, null, "2026-10-01", "2026-10-02", "2026-10-03"]);
     expect(weeks.flat().filter(Boolean)).toHaveLength(31);
     expect(weeks.every((w) => w.length === 7)).toBe(true);
   });

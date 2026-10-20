@@ -150,6 +150,54 @@ func (s *EntryService) Delete(ctx context.Context, userID, id, idemKey string, b
 	return e, nil
 }
 
+// trashOp validates and runs a restore or permanent-purge, which share the
+// shape of Delete (id + idempotency key + base version).
+func (s *EntryService) trashOp(ctx context.Context, userID, id, idemKey string, baseVersion int,
+	run func(context.Context, string, DeleteInput) (model.Entry, error), op string) (model.Entry, error) {
+	fields := map[string]string{}
+	if !validID(id) {
+		fields["id"] = "must be a UUID"
+	}
+	if idemKey == "" || len(idemKey) > 128 {
+		fields["Idempotency-Key"] = "header is required (at most 128 characters)"
+	}
+	if baseVersion < 1 {
+		fields["base_version"] = "must be 1 or more"
+	}
+	if len(fields) > 0 {
+		return model.Entry{}, &ValidationError{Fields: fields}
+	}
+	e, err := run(ctx, userID, DeleteInput{
+		ID:          strings.ToLower(id),
+		IdemKey:     idemKey,
+		BaseVersion: baseVersion,
+		RequestHash: requestHash(op, id, []byte(strconv.Itoa(baseVersion))),
+	})
+	if err != nil {
+		return model.Entry{}, err
+	}
+	_ = s.notifier.Publish(ctx, userID, e.ServerSeq)
+	return e, nil
+}
+
+// Restore brings a trashed entry back.
+func (s *EntryService) Restore(ctx context.Context, userID, id, idemKey string, baseVersion int) (model.Entry, error) {
+	return s.trashOp(ctx, userID, id, idemKey, baseVersion, s.store.RestoreEntry, "RESTORE")
+}
+
+// PurgePermanently empties one entry from the trash for good.
+func (s *EntryService) PurgePermanently(ctx context.Context, userID, id, idemKey string, baseVersion int) (model.Entry, error) {
+	return s.trashOp(ctx, userID, id, idemKey, baseVersion, s.store.PurgeEntry, "PURGE")
+}
+
+// Trash lists the entries currently in the trash (recoverable).
+func (s *EntryService) Trash(ctx context.Context, userID string, limit int) ([]model.Entry, error) {
+	if limit <= 0 || limit > MaxRecent {
+		limit = MaxRecent
+	}
+	return s.store.ListTrash(ctx, userID, limit)
+}
+
 func (s *EntryService) ListRange(ctx context.Context, userID, from, to string) ([]model.Entry, error) {
 	fields := map[string]string{}
 	if !validDate(from) {

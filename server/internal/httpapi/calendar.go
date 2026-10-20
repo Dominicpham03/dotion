@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"diary/server/internal/core"
 	"diary/shared/syncproto"
 )
@@ -199,6 +201,81 @@ func (h *Handler) calendarEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	resp.Connected, resp.Events = true, events
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// addCalendarEvent adds an all-day item to the user's primary ("general")
+// calendar — the same calendar the action-items scanner writes to.
+func (h *Handler) addCalendarEvent(w http.ResponseWriter, r *http.Request) {
+	writer, ok := h.deps.Calendar.(core.CalendarWriter)
+	if h.deps.Calendar == nil || !ok {
+		writeJSON(w, http.StatusNotFound, syncproto.ErrorResponse{Error: syncproto.CodeNotFound, Message: "Connect Google Calendar in Settings first."})
+		return
+	}
+	userID := userFrom(r.Context())
+	in, err := h.deps.Integrations.GetIntegration(r.Context(), userID, googleProvider)
+	if errors.Is(err, core.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, syncproto.ErrorResponse{Error: syncproto.CodeNotFound, Message: "Connect Google Calendar in Settings first."})
+		return
+	}
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	var req syncproto.AddEventRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, r, &core.ValidationError{Fields: map[string]string{"body": "must be JSON"}})
+		return
+	}
+	req.Title = strings.TrimSpace(req.Title)
+	if req.Title == "" {
+		h.writeError(w, r, &core.ValidationError{Fields: map[string]string{"title": "is required"}})
+		return
+	}
+	if req.Start != "" {
+		if _, perr := time.Parse(time.RFC3339, req.Start); perr != nil {
+			h.writeError(w, r, &core.ValidationError{Fields: map[string]string{"start": "must be an RFC 3339 time"}})
+			return
+		}
+		if req.End != "" {
+			if _, perr := time.Parse(time.RFC3339, req.End); perr != nil {
+				h.writeError(w, r, &core.ValidationError{Fields: map[string]string{"end": "must be an RFC 3339 time"}})
+				return
+			}
+		}
+	} else {
+		if _, perr := time.Parse("2006-01-02", req.Date); perr != nil {
+			h.writeError(w, r, &core.ValidationError{Fields: map[string]string{"date": "must be a date (YYYY-MM-DD)"}})
+			return
+		}
+		if req.EndDate != "" {
+			if _, perr := time.Parse("2006-01-02", req.EndDate); perr != nil {
+				h.writeError(w, r, &core.ValidationError{Fields: map[string]string{"end_date": "must be a date (YYYY-MM-DD)"}})
+				return
+			}
+		}
+	}
+	key := r.Header.Get(syncproto.HeaderIdempotencyKey)
+	if key == "" {
+		key = uuid.NewString()
+	}
+	ev, err := writer.CreateEvent(r.Context(), in.RefreshToken, core.NewEvent{
+		Key: key, Title: req.Title, Description: req.Description, Date: req.Date, EndDate: req.EndDate, Start: req.Start, End: req.End,
+	})
+	if errors.Is(err, core.ErrNoCalendarWrite) {
+		writeJSON(w, http.StatusForbidden, syncproto.ErrorResponse{Error: "no_calendar_write", Message: "Reconnect Google Calendar in Settings to let Dotion add events."})
+		return
+	}
+	if errors.Is(err, core.ErrGrantRevoked) {
+		_ = h.deps.Integrations.DeleteIntegration(r.Context(), userID, googleProvider)
+		writeJSON(w, http.StatusForbidden, syncproto.ErrorResponse{Error: "grant_revoked", Message: "Google access was revoked. Connect again in Settings."})
+		return
+	}
+	if err != nil {
+		h.deps.Log.Error("google add event", "err", err)
+		writeJSON(w, http.StatusBadGateway, syncproto.ErrorResponse{Error: "calendar_unavailable", Message: "Google Calendar didn't answer. Try again later."})
+		return
+	}
+	writeJSON(w, http.StatusCreated, syncproto.AddEventResponse{ID: ev.ID, Link: ev.Link})
 }
 
 // hasDrive reports whether a Google connection includes read access to Drive.

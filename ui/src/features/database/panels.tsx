@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FILTER_OPS, hasOptions, newOptionId, newProperty, OPTION_COLORS, PROP_TYPES } from "@/lib/db";
+import { deleteProperty, FILTER_OPS, hasOptions, newOptionId, newProperty, OPTION_COLORS, PROP_TYPES } from "@/lib/db";
 import { store } from "@platform";
 import type { DatabaseSchema, FilterOp, PropertyDef, PropType, ViewDef, ViewFilter } from "@/platform/types";
 import { OptionChip } from "./PropertyCell";
@@ -86,19 +86,10 @@ export function PropertiesPanel({ schema, view, update, databaseId }: { schema: 
                   )}
                   <button
                     type="button"
-                    onClick={() =>
-                      update((s) => ({
-                        ...s,
-                        properties: s.properties.filter((x) => x.id !== p.id),
-                        views: s.views.map((v) => ({
-                          ...v,
-                          filters: v.filters.filter((f) => f.propertyId !== p.id),
-                          sorts: v.sorts.filter((x) => x.propertyId !== p.id),
-                          groupBy: v.groupBy === p.id ? undefined : v.groupBy,
-                          dateProperty: v.dateProperty === p.id ? undefined : v.dateProperty,
-                        })),
-                      }))
-                    }
+                    onClick={() => {
+                      update(deleteProperty(p.id));
+                      setOpen(null);
+                    }}
                     className="self-start rounded px-2 py-1 text-xs text-danger hover:bg-danger/10"
                   >
                     Delete property (values stay in each record)
@@ -246,7 +237,20 @@ export function FilterPanel({ schema, view, update }: { schema: DatabaseSchema; 
       >
         + Add filter
       </button>
-      {view.filters.length > 1 && <p className="text-xs text-muted">Records must match every filter.</p>}
+      {view.filters.length > 1 && (
+        <label className="flex items-center gap-2 text-xs text-muted">
+          A record matches when it meets
+          <select
+            aria-label="Combine filters with and or or"
+            className={select}
+            value={view.filterOp ?? "and"}
+            onChange={(e) => update(mapView(view.id, (v) => ({ ...v, filterOp: e.target.value as "and" | "or" })))}
+          >
+            <option value="and">all filters (AND)</option>
+            <option value="or">any filter (OR)</option>
+          </select>
+        </label>
+      )}
     </div>
   );
 }

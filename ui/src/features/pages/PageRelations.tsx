@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, FilePlus2, FileText, Link2, Table2, TableProperties } from "lucide-react";
+import { ChevronRight, FilePlus2, FileText, FolderPlus, Link2, Table2, TableProperties } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { shortDate } from "@/lib/dates";
 import { uuidv7 } from "@/lib/uuid";
@@ -45,15 +45,18 @@ function useParents(parentId: string | null): Entry[] {
 
 const sectionTitle = "flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-muted";
 
-/** Sub-pages and databases inside a page, with "Add sub-page". */
-export function SubPages({ id }: { id: string }) {
+/** Sub-pages and databases inside a folder. Pages (non-folders) are leaves —
+ *  they can't hold other pages — so the create buttons show only on folders;
+ *  any existing children stay listed either way so nothing is stranded. */
+export function SubPages({ id, folder }: { id: string; folder: boolean }) {
   const navigate = useNavigate();
   const { data: children = [] } = useQuery({ queryKey: ["children", id], queryFn: () => store.listChildren(id) });
+  if (!folder && children.length === 0) return null;
   return (
     <section className="flex flex-col gap-2 border-t border-line pt-5" aria-label="Sub-pages">
       {children.length > 0 && (
         <>
-          <h2 className={sectionTitle}>Inside this page</h2>
+          <h2 className={sectionTitle}>{folder ? "Inside this folder" : "Inside this page"}</h2>
           <ul className="grid gap-2 sm:grid-cols-2">
             {children.map((c) => (
               <li key={c.id}>
@@ -69,22 +72,31 @@ export function SubPages({ id }: { id: string }) {
           </ul>
         </>
       )}
-      <div className="flex gap-1">
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted transition-colors hover:bg-ink/[0.06] hover:text-ink"
-          onClick={() => navigate(`/entry/${uuidv7()}?new=1&parent=${id}`)}
-        >
-          <FilePlus2 size={15} /> Sub-page
-        </button>
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted transition-colors hover:bg-ink/[0.06] hover:text-ink"
-          onClick={() => navigate(`/new-database?parent=${id}`)}
-        >
-          <TableProperties size={15} /> Database
-        </button>
-      </div>
+      {folder && (
+        <div className="flex gap-1">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted transition-colors hover:bg-ink/[0.06] hover:text-ink"
+            onClick={() => navigate(`/entry/${uuidv7()}?new=1&parent=${id}`)}
+          >
+            <FilePlus2 size={15} /> Page
+          </button>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted transition-colors hover:bg-ink/[0.06] hover:text-ink"
+            onClick={() => navigate(`/new-folder?parent=${id}`)}
+          >
+            <FolderPlus size={15} /> Folder
+          </button>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-muted transition-colors hover:bg-ink/[0.06] hover:text-ink"
+            onClick={() => navigate(`/new-database?parent=${id}`)}
+          >
+            <TableProperties size={15} /> Database
+          </button>
+        </div>
+      )}
     </section>
   );
 }

@@ -46,17 +46,40 @@ export function newProperty(name: string, type: PropType): PropertyDef {
   return p;
 }
 
-export function defaultSchema(): DatabaseSchema {
+/** Remove a property (column) from the schema and scrub every reference to it
+ *  from all views. The stored value in each record is left alone. */
+export function deleteProperty(id: string): (s: DatabaseSchema) => DatabaseSchema {
+  return (s) => ({
+    ...s,
+    properties: s.properties.filter((x) => x.id !== id),
+    views: s.views.map((v) => ({
+      ...v,
+      hidden: v.hidden?.filter((x) => x !== id),
+      filters: v.filters.filter((f) => f.propertyId !== id),
+      sorts: v.sorts.filter((x) => x.propertyId !== id),
+      groupBy: v.groupBy === id ? undefined : v.groupBy,
+      dateProperty: v.dateProperty === id ? undefined : v.dateProperty,
+    })),
+  });
+}
+
+// A fresh database always carries Status, Tags and Date properties (so a Board
+// or Calendar added later has something to group/plot on); `viewTypes` picks
+// which views it opens with — defaults to all three, always at least a Table.
+export function defaultSchema(viewTypes: ViewDef["type"][] = ["table", "board", "calendar"]): DatabaseSchema {
   const status = newProperty("Status", "status");
   const tags = newProperty("Tags", "multi_select");
   const date = newProperty("Date", "date");
+  const make: Record<ViewDef["type"], () => ViewDef> = {
+    table: () => ({ id: newViewId(), name: "Table", type: "table", filters: [], sorts: [] }),
+    board: () => ({ id: newViewId(), name: "Board", type: "board", groupBy: status.id, filters: [], sorts: [] }),
+    calendar: () => ({ id: newViewId(), name: "Calendar", type: "calendar", dateProperty: date.id, filters: [], sorts: [] }),
+  };
+  const order: ViewDef["type"][] = ["table", "board", "calendar"];
+  const chosen = order.filter((t) => viewTypes.includes(t));
   return {
     properties: [status, tags, date],
-    views: [
-      { id: newViewId(), name: "Table", type: "table", filters: [], sorts: [] },
-      { id: newViewId(), name: "Board", type: "board", groupBy: status.id, filters: [], sorts: [] },
-      { id: newViewId(), name: "Calendar", type: "calendar", dateProperty: date.id, filters: [], sorts: [] },
-    ],
+    views: (chosen.length ? chosen : ["table"]).map((t) => make[t]()),
   };
 }
 
@@ -209,7 +232,21 @@ function sortKey(rec: Entry, propId: string, schema: DatabaseSchema): string | n
 export function applyView(records: Entry[], schema: DatabaseSchema, view: ViewDef | undefined, today: string): Entry[] {
   if (!view) return records;
   const props = new Map(schema.properties.map((p) => [p.id, p]));
-  const out = records.filter((r) => view.filters.every((f) => matches(f, r, props.get(f.propertyId), today)));
+  // Only "active" filters count. An unfinished filter (needs a value but has
+  // none) is ignored, so in "match any" (OR) mode it can't force every record in.
+  const active = view.filters.filter((f) => {
+    if (f.op === "empty" || f.op === "not_empty") return true;
+    const type = f.propertyId === "title" ? "text" : (props.get(f.propertyId)?.type ?? "text");
+    if (type === "checkbox") return true;
+    const want = f.value ?? null;
+    return want !== null && want !== "";
+  });
+  const keep = (r: Entry) => {
+    if (active.length === 0) return true;
+    const test = (f: ViewFilter) => matches(f, r, props.get(f.propertyId), today);
+    return view.filterOp === "or" ? active.some(test) : active.every(test);
+  };
+  const out = records.filter(keep);
   const sorts = view.sorts.length ? view.sorts : [{ propertyId: "created", direction: "asc" as const }];
   return out.sort((a, b) => {
     for (const s of sorts) {

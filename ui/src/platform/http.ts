@@ -2,6 +2,7 @@
 // is no cursor and no /v1/sync here; live notices just refetch what is on
 // screen (FRONTEND.md §3.3).
 import { uuidv7 } from "@/lib/uuid";
+import { isFolder } from "@/lib/folders";
 import { copyTitle, extractText, preview, wordCount } from "@/lib/text";
 import {
   aiChatBody,
@@ -62,7 +63,7 @@ const summarize = (e: ApiEntry): EntrySummary => {
   const text = extractText(e.body);
   return {
     id: e.id, entryDate: e.entry_date, kind: e.kind ?? "page", parentId: e.parent_id ?? null, icon: e.meta?.icon ?? "",
-    title: e.title, preview: preview(text), words: wordCount(text), updatedAt: e.updated_at,
+    folder: isFolder(e.meta), title: e.title, preview: preview(text), words: wordCount(text), updatedAt: e.updated_at, version: e.version,
   };
 };
 
@@ -172,7 +173,22 @@ export const store: DiaryStore = {
     await api(`/entries/${id}?base_version=${baseVersion}`, { method: "DELETE", headers: { "Idempotency-Key": uuidv7() } });
   },
 
+  listTrash: async () => (await api<{ entries: ApiEntry[] }>("/trash")).entries.map(summarize),
+  async restoreEntry(id, baseVersion) {
+    await api(`/entries/${id}/restore?base_version=${baseVersion}`, { method: "POST", headers: { "Idempotency-Key": uuidv7() } });
+  },
+  async purgeEntry(id, baseVersion) {
+    await api(`/entries/${id}/purge?base_version=${baseVersion}`, { method: "POST", headers: { "Idempotency-Key": uuidv7() } });
+  },
+
   async uploadImage(file) {
+    const r = await api<{ url: string }>("/blobs", { method: "POST", body: file, headers: { "Content-Type": "application/octet-stream" } });
+    return r.url;
+  },
+
+  async uploadFile(file) {
+    // Same content-addressed endpoint as images; the server stores any file and
+    // serves non-images as a download attachment.
     const r = await api<{ url: string }>("/blobs", { method: "POST", body: file, headers: { "Content-Type": "application/octet-stream" } });
     return r.url;
   },
@@ -219,6 +235,15 @@ export const store: DiaryStore = {
         `/calendar/events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
       );
       return { connected: r.connected, events: r.events.map(({ all_day, ...e }) => ({ ...e, allDay: all_day })) };
+    },
+    async addEvent(input) {
+      return api<{ id: string; link?: string }>("/calendar/events", {
+        method: "POST",
+        headers: { "Idempotency-Key": uuidv7() },
+        body: JSON.stringify({
+          title: input.title, date: input.date, end_date: input.endDate, start: input.start, end: input.end, description: input.description,
+        }),
+      });
     },
   },
 

@@ -218,8 +218,10 @@ type eventList struct {
 	NextPageToken string `json:"nextPageToken"`
 }
 
-// Events returns events between start and end from every calendar the user
-// shows in Google Calendar (the primary one at least), sorted by start.
+// Events returns events between start and end from every calendar the user can
+// read in Google Calendar — the main (primary) calendar inherits them all,
+// whether or not each calendar is ticked in Google's own sidebar — sorted by
+// start.
 func (c *Client) Events(ctx context.Context, refresh string, start, end time.Time) ([]core.CalendarEvent, error) {
 	access, err := c.access(ctx, refresh)
 	if err != nil {
@@ -231,12 +233,12 @@ func (c *Client) Events(ctx context.Context, refresh string, start, end time.Tim
 	}
 	out := []core.CalendarEvent{}
 	for _, cal := range cals.Items {
-		if !cal.Selected && !cal.Primary {
-			continue
-		}
 		name := cal.SummaryOverride
 		if name == "" {
 			name = cal.Summary
+		}
+		if cal.Primary {
+			name = "" // the primary calendar is named after the account email; don't surface it
 		}
 		page := ""
 		for n := 0; n < 5; n++ { // at most 5 × 250 events per calendar and range
@@ -296,20 +298,41 @@ func (c *Client) CreateEvent(ctx context.Context, refresh string, ev core.NewEve
 	if err != nil {
 		return core.CreatedEvent{}, err
 	}
-	day, err := time.Parse(time.DateOnly, ev.Date)
-	if err != nil {
-		return core.CreatedEvent{}, err
-	}
 	// Event ids allow the characters 0-9 and a-v; a hex digest qualifies.
 	id := "dotion" + strings.ReplaceAll(ev.Key, "-", "")
-	body, _ := json.Marshal(map[string]any{
-		"id":           id,
-		"summary":      ev.Title,
-		"description":  ev.Description,
-		"start":        map[string]string{"date": ev.Date},
-		"end":          map[string]string{"date": day.AddDate(0, 0, 1).Format(time.DateOnly)},
-		"transparency": "transparent", // an all-day to-do shouldn't block the day
-	})
+	fields := map[string]any{"id": id, "summary": ev.Title, "description": ev.Description}
+	if ev.Start != "" {
+		// Timed event: start..end as instants (end defaults to start + 1h).
+		st, err := time.Parse(time.RFC3339, ev.Start)
+		if err != nil {
+			return core.CreatedEvent{}, err
+		}
+		et := st.Add(time.Hour)
+		if ev.End != "" {
+			if e2, perr := time.Parse(time.RFC3339, ev.End); perr == nil && e2.After(st) {
+				et = e2
+			}
+		}
+		fields["start"] = map[string]string{"dateTime": st.Format(time.RFC3339)}
+		fields["end"] = map[string]string{"dateTime": et.Format(time.RFC3339)}
+	} else {
+		day, err := time.Parse(time.DateOnly, ev.Date)
+		if err != nil {
+			return core.CreatedEvent{}, err
+		}
+		// Google's all-day end.date is exclusive, so the last day shown is EndDate
+		// (inclusive) + 1. A missing or earlier EndDate makes it a single day.
+		last := day
+		if ev.EndDate != "" {
+			if e2, perr := time.Parse(time.DateOnly, ev.EndDate); perr == nil && e2.After(day) {
+				last = e2
+			}
+		}
+		fields["start"] = map[string]string{"date": ev.Date}
+		fields["end"] = map[string]string{"date": last.AddDate(0, 0, 1).Format(time.DateOnly)}
+		fields["transparency"] = "transparent" // an all-day to-do shouldn't block the day
+	}
+	body, _ := json.Marshal(fields)
 	req, err := http.NewRequestWithContext(ctx, "POST", c.APIBase+"/calendars/primary/events", strings.NewReader(string(body)))
 	if err != nil {
 		return core.CreatedEvent{}, err

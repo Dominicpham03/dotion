@@ -2,12 +2,13 @@ import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-qu
 import { createBrowserRouter, createHashRouter, Navigate, RouterProvider, type RouteObject } from "react-router-dom";
 import { CalendarPage } from "@/features/calendar/CalendarPage";
 import { DayPage } from "@/features/day/DayPage";
-import { EntryPage, NewDatabase } from "@/features/entry/EntryPage";
+import { EntryPage, NewDatabase, NewFolder } from "@/features/entry/EntryPage";
 import { Login } from "@/features/onboarding/Login";
 import { Welcome } from "@/features/onboarding/Welcome";
 import { SearchPage } from "@/features/search/SearchPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { TemplatesPage } from "@/features/templates/TemplatesPage";
+import { TrashPage } from "@/features/trash/TrashPage";
 import { AuthRequired } from "@/platform/types";
 import { store } from "@platform";
 import { Layout } from "./Layout";
@@ -24,7 +25,9 @@ const routes: RouteObject[] = [
       { path: "/search", element: <SearchPage /> },
       { path: "/settings", element: <SettingsPage /> },
       { path: "/templates", element: <TemplatesPage /> },
+      { path: "/trash", element: <TrashPage /> },
       { path: "/new-database", element: <NewDatabase /> },
+      { path: "/new-folder", element: <NewFolder /> },
     ],
   },
   store.platform !== "web" ? { path: "/welcome", element: <Welcome /> } : { path: "/login", element: <Login /> },

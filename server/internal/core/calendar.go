@@ -50,12 +50,17 @@ type IntegrationStore interface {
 	IntegrationUsers(ctx context.Context, provider string) ([]string, error)
 }
 
-// NewEvent is an all-day event to add to the user's calendar.
+// NewEvent is an event to add to the user's calendar. It is all-day when only
+// Date is set (EndDate extends it over several days); when Start is set it is a
+// timed event (Date/EndDate are then ignored).
 type NewEvent struct {
 	Key         string // a UUID that identifies the item: the same key never adds a second event
 	Title       string
 	Description string
-	Date        string // YYYY-MM-DD
+	Date        string // YYYY-MM-DD (all-day start)
+	EndDate     string // YYYY-MM-DD (all-day last day, inclusive; defaults to Date)
+	Start       string // RFC 3339; when set, a timed event
+	End         string // RFC 3339; end of a timed event (defaults to Start + 1h)
 }
 
 // CreatedEvent identifies an event added to the calendar.

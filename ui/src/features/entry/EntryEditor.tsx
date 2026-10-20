@@ -14,6 +14,7 @@ import { IconPicker } from "@/features/pages/IconPicker";
 import { Backlinks, Breadcrumbs, SubPages } from "@/features/pages/PageRelations";
 import { DELAYS, type SaveState } from "@/lib/autosave";
 import { withProp } from "@/lib/db";
+import { isFolder } from "@/lib/folders";
 import { todayLocal } from "@/lib/dates";
 import { saverFor, updateCaches } from "@/lib/savers";
 import { EMPTY_DOC, sameDoc } from "@/lib/text";
@@ -329,7 +330,7 @@ export function EntryEditor({ entry, id, entryDate, parentId = entry?.parentId ?
 
       <DiaryEditor initialContent={entry?.body ?? EMPTY_DOC} onReady={onReady} onUserChange={changed} onBlur={flush} />
 
-      {!entryDate && !isRecord && exists && <SubPages id={id} />}
+      {!entryDate && !isRecord && exists && <SubPages id={id} folder={isFolder(meta)} />}
       {exists && <Backlinks id={id} />}
     </article>
   );

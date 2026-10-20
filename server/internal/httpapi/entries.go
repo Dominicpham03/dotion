@@ -78,6 +78,45 @@ func (h *Handler) deleteEntry(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, e)
 }
 
+func (h *Handler) listTrash(w http.ResponseWriter, r *http.Request) {
+	entries, err := h.deps.Entries.Trash(r.Context(), userFrom(r.Context()), 100)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, syncproto.EntriesResponse{Entries: entries})
+}
+
+func (h *Handler) restoreEntry(w http.ResponseWriter, r *http.Request) {
+	base, err := strconv.Atoi(r.URL.Query().Get("base_version"))
+	if err != nil {
+		h.writeError(w, r, &core.ValidationError{Fields: map[string]string{"base_version": "query parameter is required"}})
+		return
+	}
+	e, err := h.deps.Entries.Restore(r.Context(), userFrom(r.Context()), r.PathValue("id"),
+		r.Header.Get(syncproto.HeaderIdempotencyKey), base)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, e)
+}
+
+func (h *Handler) purgeEntry(w http.ResponseWriter, r *http.Request) {
+	base, err := strconv.Atoi(r.URL.Query().Get("base_version"))
+	if err != nil {
+		h.writeError(w, r, &core.ValidationError{Fields: map[string]string{"base_version": "query parameter is required"}})
+		return
+	}
+	e, err := h.deps.Entries.PurgePermanently(r.Context(), userFrom(r.Context()), r.PathValue("id"),
+		r.Header.Get(syncproto.HeaderIdempotencyKey), base)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, e)
+}
+
 func (h *Handler) listEntries(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var (

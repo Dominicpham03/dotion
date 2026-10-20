@@ -124,6 +124,25 @@ type EventsResponse struct {
 	Events    []CalendarEvent `json:"events"`
 }
 
+// AddEventRequest is the body of POST /v1/calendar/events, added to the user's
+// primary ("general") calendar. All-day when only Date is set (optionally
+// through EndDate for a multi-day span); a timed event when Start (and
+// optionally End) is set — Start and End may fall on different days.
+type AddEventRequest struct {
+	Title       string `json:"title"`
+	Date        string `json:"date"`               // YYYY-MM-DD (all-day start)
+	EndDate     string `json:"end_date,omitempty"` // YYYY-MM-DD (all-day last day, inclusive)
+	Start       string `json:"start,omitempty"`    // RFC 3339 (timed event)
+	End         string `json:"end,omitempty"`      // RFC 3339 (timed event end)
+	Description string `json:"description,omitempty"`
+}
+
+// AddEventResponse identifies the event that POST /v1/calendar/events created.
+type AddEventResponse struct {
+	ID   string `json:"id"`
+	Link string `json:"link,omitempty"` // opens it in Google Calendar
+}
+
 // GoogleStatus is the body of GET /v1/integrations/google.
 type GoogleStatus struct {
 	Configured  bool   `json:"configured"`

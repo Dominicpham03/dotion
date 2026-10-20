@@ -89,6 +89,10 @@ func (c *Client) list(ctx context.Context, base, token, kind, path string, since
 			if i := strings.LastIndexAny(project, "#!"); i > 0 {
 				project = project[:i]
 			}
+			// Show just the project name, not the "group/project" path (e.g. rgnets/rxg -> rxg).
+			if i := strings.LastIndex(project, "/"); i >= 0 {
+				project = project[i+1:]
+			}
 			out = append(out, core.GitLabItem{
 				Kind: kind, GlobalID: it.ID, ProjectID: it.ProjectID, IID: it.IID, Title: it.Title,
 				Description: it.Description, State: it.State, URL: it.WebURL, Due: it.DueDate,

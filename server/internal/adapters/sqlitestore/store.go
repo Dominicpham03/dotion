@@ -148,13 +148,19 @@ func (s *Store) Backup(ctx context.Context, dst string) error {
 	return nil
 }
 
-// CleanupLoop deletes idempotency records older than 7 days, once an hour,
-// and runs PRAGMA optimize once a day.
+// TrashRetention is how long a deleted entry stays recoverable in the trash
+// before the content is purged for good.
+const TrashRetention = 15 * 24 * time.Hour
+
+// CleanupLoop deletes idempotency records older than 7 days and empties the
+// trash of anything deleted more than 15 days ago, once an hour, and runs
+// PRAGMA optimize once a day.
 func (s *Store) CleanupLoop(ctx context.Context) {
 	tick := time.NewTicker(time.Hour)
 	defer tick.Stop()
 	for n := 0; ; n++ {
 		_, _ = s.DeleteOldIdempotency(ctx, 7*24*time.Hour)
+		_, _ = s.PurgeTrashedBefore(ctx, s.now().Add(-TrashRetention))
 		if n%24 == 23 {
 			_, _ = s.writer.ExecContext(ctx, "PRAGMA optimize")
 		}

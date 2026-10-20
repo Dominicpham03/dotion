@@ -26,11 +26,12 @@ function Tool({ label, active, onClick, children }: { label: string; active?: bo
 
 const Sep = () => <span className="mx-1.5 h-5 w-px bg-line" aria-hidden />;
 
-export function Toolbar({ editor, onImages }: { editor: Editor; onImages: (files: File[]) => void }) {
+export function Toolbar({ editor, onUpload }: { editor: Editor; onUpload: (files: File[]) => void }) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [href, setHref] = useState("");
   const [menu, setMenu] = useState<"insert" | "database" | null>(null);
   const [drive, setDrive] = useState(false);
+  const imageInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const chain = () => editor.chain().focus();
 
@@ -96,7 +97,8 @@ export function Toolbar({ editor, onImages }: { editor: Editor; onImages: (files
             onClose={() => setMenu(null)}
             onDatabases={() => setMenu("database")}
             editor={editor}
-            pickImage={() => fileInput.current?.click()}
+            pickImage={() => imageInput.current?.click()}
+            pickFile={store.uploadFile ? () => fileInput.current?.click() : undefined}
             pickDrive={() => setDrive(true)}
           />
         )}
@@ -111,13 +113,23 @@ export function Toolbar({ editor, onImages }: { editor: Editor; onImages: (files
         />
       )}
       <input
-        ref={fileInput}
+        ref={imageInput}
         type="file"
         accept="image/png,image/jpeg,image/gif,image/webp"
         multiple
         hidden
         onChange={(e) => {
-          onImages(Array.from(e.target.files ?? []));
+          onUpload(Array.from(e.target.files ?? []));
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={fileInput}
+        type="file"
+        multiple
+        hidden
+        onChange={(e) => {
+          onUpload(Array.from(e.target.files ?? []));
           e.target.value = "";
         }}
       />
@@ -184,8 +196,8 @@ export function Toolbar({ editor, onImages }: { editor: Editor; onImages: (files
 }
 
 function InsertMenu({
-  mode, editor, onClose, onDatabases, pickImage, pickDrive,
-}: { mode: "insert" | "database"; editor: Editor; onClose: () => void; onDatabases: () => void; pickImage: () => void; pickDrive: () => void }) {
+  mode, editor, onClose, onDatabases, pickImage, pickFile, pickDrive,
+}: { mode: "insert" | "database"; editor: Editor; onClose: () => void; onDatabases: () => void; pickImage: () => void; pickFile?: () => void; pickDrive: () => void }) {
   const chain = () => editor.chain().focus();
   const { data: pages = [] } = useQuery({ queryKey: ["pages"], queryFn: () => store.listPages(), enabled: mode === "database" });
   const databases = pages.filter((p) => p.kind === "database");
@@ -214,6 +226,7 @@ function InsertMenu({
           {item("Code block", "With syntax highlighting", () => chain().toggleCodeBlock().run())}
           {item("Table", "3 × 3 with a header row", () => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run())}
           {item("Image", "PNG, JPEG, GIF or WebP · or paste one", pickImage)}
+          {pickFile && item("File", "Attach any file to download · or drop one", pickFile)}
           {item("Link card", "A link shown as a card", () => chain().insertContent({ type: "linkCard", attrs: { url: "" } }).run())}
           {item("Google Drive file", "Search Drive; import a Google Doc as a page", pickDrive)}
           {item("Database view", "Show a database inside this page", onDatabases)}

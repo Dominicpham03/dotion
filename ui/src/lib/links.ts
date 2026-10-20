@@ -34,7 +34,7 @@ export function extractLinks(body: JSONContent | null | undefined): string[] {
 export function extractImages(body: JSONContent | null | undefined): string[] {
   const out = new Set<string>();
   visit(body, (n) => {
-    if (n.type === "image") {
+    if (n.type === "image" || n.type === "fileAttachment") {
       const h = blobHash(n.attrs?.src);
       if (h) out.add(h);
     }

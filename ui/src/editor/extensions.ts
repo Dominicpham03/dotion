@@ -14,6 +14,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { common, createLowlight } from "lowlight";
 import { DatabaseView } from "./nodes/DatabaseView";
 import { DriveFile } from "./nodes/DriveFile";
+import { FileAttachment } from "./nodes/FileAttachment";
 import { LinkCard } from "./nodes/LinkCard";
 import { PageLink } from "./nodes/PageLink";
 import { store } from "@platform";
@@ -79,4 +80,5 @@ export const extensions = [
   LinkCard,
   DatabaseView,
   DriveFile,
+  FileAttachment,
 ];

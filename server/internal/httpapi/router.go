@@ -68,6 +68,9 @@ func New(deps Deps) http.Handler {
 	mux.Handle("GET /v1/sync", authed(h.sync))
 	mux.Handle("PUT /v1/entries/{id}", authed(h.putEntry))
 	mux.Handle("DELETE /v1/entries/{id}", authed(h.deleteEntry))
+	mux.Handle("POST /v1/entries/{id}/restore", authed(h.restoreEntry))
+	mux.Handle("POST /v1/entries/{id}/purge", authed(h.purgeEntry))
+	mux.Handle("GET /v1/trash", authed(h.listTrash))
 	mux.Handle("GET /v1/entries/{id}", authed(h.getEntry))
 	mux.Handle("GET /v1/entries", authed(h.listEntries)) // ?from=&to=, ?recent=N, ?parent=ID or ?pages=1
 	mux.Handle("GET /v1/entries/{id}/backlinks", authed(h.backlinks))
@@ -79,6 +82,7 @@ func New(deps Deps) http.Handler {
 	mux.HandleFunc("GET /v1/integrations/google/callback", h.googleCallback) // the state identifies the user
 	mux.Handle("DELETE /v1/integrations/google", authed(h.googleDisconnect))
 	mux.Handle("GET /v1/calendar/events", authed(h.calendarEvents)) // ?start=&end=
+	mux.Handle("POST /v1/calendar/events", authed(h.addCalendarEvent))
 	mux.Handle("GET /v1/drive/files", authed(h.driveFiles))         // ?q=&page=
 	mux.Handle("GET /v1/drive/files/{id}/markdown", authed(h.driveMarkdown))
 	mux.Handle("GET /v1/integrations/gitlab", authed(h.gitlabStatus))

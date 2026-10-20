@@ -105,6 +105,16 @@ func (c conv) block(b *strings.Builder, n mdNode, indent string) {
 			src = c.opts.ImageSrc(src)
 		}
 		b.WriteString(indent + "![" + n.attr("alt") + "](" + src + ")\n")
+	case "fileAttachment":
+		src := n.attr("src")
+		if c.opts.ImageSrc != nil {
+			src = c.opts.ImageSrc(src)
+		}
+		name := n.attr("name")
+		if name == "" {
+			name = "file"
+		}
+		b.WriteString(indent + "[" + name + "](" + src + ")\n")
 	case "linkCard":
 		title := n.attr("title")
 		if title == "" {

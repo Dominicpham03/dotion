@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { EmptyState } from "@/components/ui";
 import { DatabasePage } from "@/features/database/DatabasePage";
 import { defaultSchema } from "@/lib/db";
+import { getDefaultViews } from "@/lib/dbprefs";
 import { longDate } from "@/lib/dates";
 import { saverFor } from "@/lib/savers";
 import { isConflictCopy } from "@/lib/text";
@@ -68,7 +69,7 @@ export function NewDatabase() {
     const id = uuidv7();
     const draft = {
       id, entryDate: null, kind: "database" as const, parentId: params.get("parent"), title: "Untitled database",
-      body: { type: "doc", content: [] }, meta: { schema: defaultSchema() },
+      body: { type: "doc", content: [] }, meta: { schema: defaultSchema(getDefaultViews()) },
     };
     qc.setQueryData(["entry", id], { ...draft, version: 0, updatedAt: new Date().toISOString(), deletedAt: null });
     qc.setQueryData(["children", id], []);
@@ -80,4 +81,31 @@ export function NewDatabase() {
     navigate(`/entry/${id}`, { replace: true });
   }, [params, navigate, qc]);
   return <div className="h-64 animate-pulse rounded-lg bg-accent-soft/40" aria-label="Creating database" />;
+}
+
+/** /new-folder[?parent=<id>]: creates a folder (a page meant to hold notes and
+ *  sub-folders, with a 📁 icon), then opens it. */
+export function NewFolder() {
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) return; // StrictMode runs effects twice in development
+    started.current = true;
+    const id = uuidv7();
+    const draft = {
+      id, entryDate: null, kind: "page" as const, parentId: params.get("parent"), title: "New folder",
+      body: { type: "doc", content: [] }, meta: { icon: "📁", folder: true },
+    };
+    qc.setQueryData(["entry", id], { ...draft, version: 0, updatedAt: new Date().toISOString(), deletedAt: null });
+    qc.setQueryData(["children", id], []);
+    const s = saverFor(qc, id, 0);
+    s.change(draft, 0);
+    void s.flush().then(() => {
+      requestAnimationFrame(() => document.getElementById("entry-title")?.focus());
+    });
+    navigate(`/entry/${id}`, { replace: true });
+  }, [params, navigate, qc]);
+  return <div className="h-64 animate-pulse rounded-lg bg-accent-soft/40" aria-label="Creating folder" />;
 }

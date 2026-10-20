@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, ChevronRight, FileText, LayoutTemplate, Menu, Plus, Search, Settings, Sparkles, Sun, Table2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CalendarDays, ChevronRight, FileText, FolderPlus, LayoutTemplate, Menu, MoreHorizontal, Plus, Search, Settings, Sparkles, Sun, Table2, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { SyncBadge } from "@/components/SyncBadge";
 import { IconButton } from "@/components/ui";
@@ -12,11 +13,63 @@ import { seenCopies } from "@/lib/attention";
 import { shortDate } from "@/lib/dates";
 import { flushAll } from "@/lib/savers";
 import { readJSON, writeJSON } from "@/lib/storage";
+import { isFolder } from "@/lib/folders";
 import { isConflictCopy } from "@/lib/text";
 import { toggleTheme } from "@/lib/theme";
 import { uuidv7 } from "@/lib/uuid";
 import { store } from "@platform";
 import type { EntrySummary } from "@/platform/types";
+import type { QueryClient } from "@tanstack/react-query";
+
+// --- drag a page into a folder ------------------------------------------------
+// The id of the page currently being dragged in the sidebar (null when idle).
+// Kept at module scope because dataTransfer contents can't be read during
+// dragover, so each node needs to know what's in flight to decide if it's a
+// valid drop target.
+let draggingId: string | null = null;
+
+// True when dropping `dragId` onto `targetId` would nest a page inside itself
+// or one of its own descendants (which would create a cycle in the tree).
+async function wouldCycle(dragId: string, targetId: string | null): Promise<boolean> {
+  let cur = targetId;
+  for (let i = 0; cur && i < 12; i++) {
+    if (cur === dragId) return true;
+    cur = (await store.getEntry(cur))?.parentId ?? null;
+  }
+  return false;
+}
+
+// Move a page under a new parent (null = top level) and refresh the tree.
+async function movePage(id: string, targetParentId: string | null, qc: QueryClient): Promise<void> {
+  if (id === targetParentId || (await wouldCycle(id, targetParentId))) return;
+  const full = await store.getEntry(id);
+  if (!full || full.parentId === targetParentId) return;
+  const oldParent = full.parentId;
+  await store.saveEntry(
+    { id: full.id, entryDate: full.entryDate, kind: full.kind, parentId: targetParentId, title: full.title, body: full.body, meta: full.meta },
+    full.version,
+  );
+  await Promise.all([
+    qc.invalidateQueries({ queryKey: ["pages"] }),
+    qc.invalidateQueries({ queryKey: ["recent"] }),
+    targetParentId ? qc.invalidateQueries({ queryKey: ["children", targetParentId] }) : Promise.resolve(),
+    oldParent ? qc.invalidateQueries({ queryKey: ["children", oldParent] }) : Promise.resolve(),
+  ]);
+}
+
+// Soft-delete a page from the sidebar: it moves to Trash (recoverable), and the
+// tree, recent list and trash refresh.
+async function deletePage(id: string, qc: QueryClient): Promise<void> {
+  const full = await store.getEntry(id);
+  if (!full) return;
+  await store.deleteEntry(id, full.version);
+  await Promise.all([
+    qc.invalidateQueries({ queryKey: ["pages"] }),
+    qc.invalidateQueries({ queryKey: ["recent"] }),
+    qc.invalidateQueries({ queryKey: ["trash"] }),
+    full.parentId ? qc.invalidateQueries({ queryKey: ["children", full.parentId] }) : Promise.resolve(),
+  ]);
+}
 
 export function Layout() {
   const qc = useQueryClient();
@@ -138,6 +191,11 @@ export function Layout() {
           <SideLink to="/templates" icon={<LayoutTemplate size={16} />}>
             Templates
           </SideLink>
+          {typeof store.listTrash === "function" && (
+            <SideLink to="/trash" icon={<Trash2 size={16} />}>
+              Trash
+            </SideLink>
+          )}
           <SideLink to="/settings" icon={<Settings size={16} />}>
             Settings
           </SideLink>
@@ -199,13 +257,28 @@ function SectionHeader({ title, children, warn }: { title: string; children?: Re
 
 function PagesTree() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const { data: roots = [] } = useQuery({ queryKey: ["pages"], queryFn: () => store.listPages() });
   const pages = roots.filter((p) => !isConflictCopy(p.title));
+  // Dropping a page onto empty space in this section moves it back to the top level.
+  const onRootDragOver = (e: React.DragEvent) => {
+    if (!draggingId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+  const onRootDrop = (e: React.DragEvent) => {
+    const id = draggingId ?? e.dataTransfer.getData("text/plain");
+    draggingId = null;
+    if (id) void movePage(id, null, qc);
+  };
   return (
-    <section className="flex flex-col gap-0.5" aria-label="Pages">
+    <section className="flex flex-col gap-0.5" aria-label="Pages" onDragOver={onRootDragOver} onDrop={onRootDrop}>
       <SectionHeader title="Pages">
         <IconButton size="sm" label="New page (Ctrl+N)" onClick={() => navigate(`/entry/${uuidv7()}?new=1`)}>
           <Plus size={15} />
+        </IconButton>
+        <IconButton size="sm" label="New folder" onClick={() => navigate("/new-folder")}>
+          <FolderPlus size={15} />
         </IconButton>
         <IconButton size="sm" label="New database" onClick={() => navigate("/new-database")}>
           <Table2 size={15} />
@@ -235,18 +308,93 @@ function PageIcon({ icon, kind }: { icon: string; kind: string }) {
   return kind === "database" ? <Table2 size={15} className="shrink-0 opacity-70" /> : <FileText size={15} className="shrink-0 opacity-70" />;
 }
 
-function TreeNode({ entry, depth }: { entry: { id: string; title: string; icon: string; kind: string }; depth: number }) {
+function TreeNode({ entry, depth }: { entry: { id: string; title: string; icon: string; kind: string; folder?: boolean }; depth: number }) {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
   const key = `tree-open:${entry.id}`;
   const [open, setOpen] = useState(() => readJSON(key, false));
+  const [dropActive, setDropActive] = useState(false);
   const canOpen = entry.kind !== "database" && depth < 4;
+  // Only a FOLDER holds other pages — a page is never put inside a page. So the
+  // "add inside" and drop-into affordances are offered on folders only.
+  const canAddChild = isFolder(entry) && depth < 4;
   const { data: children = [] } = useQuery({
     queryKey: ["children", entry.id],
     queryFn: () => store.listChildren(entry.id),
     enabled: open && canOpen,
   });
+  const addChild = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setOpen(true);
+    writeJSON(key, true); // reveal the new sub-page once it saves
+    navigate(`/entry/${uuidv7()}?new=1&parent=${entry.id}`);
+  };
+  // Drag this page onto another page to nest it there (a page acts as a folder).
+  const onDragStart = (e: React.DragEvent) => {
+    e.stopPropagation();
+    draggingId = entry.id;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", entry.id);
+  };
+  const canAcceptDrop = canAddChild && !!draggingId && draggingId !== entry.id;
+  const onDragOver = (e: React.DragEvent) => {
+    if (!canAcceptDrop) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    if (!dropActive) setDropActive(true);
+  };
+  const onDrop = (e: React.DragEvent) => {
+    if (!canAddChild) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDropActive(false);
+    const id = draggingId ?? e.dataTransfer.getData("text/plain");
+    draggingId = null;
+    if (!id || id === entry.id) return;
+    setOpen(true);
+    writeJSON(key, true); // reveal the moved page inside this one
+    void movePage(id, entry.id, qc);
+  };
+  // Row "⋯" menu: add a page inside, or delete the page (to Trash).
+  const location = useLocation();
+  const menuRef = useRef<HTMLButtonElement>(null);
+  const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const closeMenu = () => {
+    setMenuPos(null);
+    setConfirmDel(false);
+  };
+  const openMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const r = menuRef.current?.getBoundingClientRect();
+    if (r) setMenuPos({ left: Math.min(r.left, window.innerWidth - 190), top: r.bottom + 4 });
+  };
+  const doDelete = () => {
+    const viewing = location.pathname === `/entry/${entry.id}`;
+    void deletePage(entry.id, qc).then(() => {
+      if (viewing) navigate("/today");
+    });
+    closeMenu();
+  };
   return (
-    <li>
-      <NavLink to={`/entry/${entry.id}`} className={({ isActive }) => `${rowClass(isActive)} !gap-1.5 !py-1`} style={{ paddingLeft: 6 + depth * 14 }}>
+    <li
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={() => (draggingId = null)}
+      onDragOver={onDragOver}
+      onDragLeave={() => dropActive && setDropActive(false)}
+      onDrop={onDrop}
+    >
+      <NavLink
+        to={`/entry/${entry.id}`}
+        className={({ isActive }) =>
+          `${rowClass(isActive)} !gap-1.5 !py-1 ${dropActive ? "!bg-accent-soft ring-1 ring-inset ring-accent" : ""}`
+        }
+        style={{ paddingLeft: 6 + depth * 14 }}
+      >
         <button
           type="button"
           aria-label={open ? `Collapse ${entry.title}` : `Expand ${entry.title}`}
@@ -262,12 +410,83 @@ function TreeNode({ entry, depth }: { entry: { id: string; title: string; icon: 
           <ChevronRight size={14} className={`transition-transform ${open ? "rotate-90" : ""}`} />
         </button>
         <PageIcon icon={entry.icon} kind={entry.kind} />
-        <span className="truncate">{entry.title || "Untitled"}</span>
+        <span className="min-w-0 flex-1 truncate">{entry.title || "Untitled"}</span>
+        {canAddChild && (
+          <button
+            type="button"
+            aria-label={`Add a page inside ${entry.title || "Untitled"}`}
+            title="Add a page inside"
+            onClick={addChild}
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-opacity hover:bg-ink/10 hover:text-ink group-hover:opacity-100"
+          >
+            <Plus size={14} />
+          </button>
+        )}
+        <button
+          ref={menuRef}
+          type="button"
+          aria-label={`More actions for ${entry.title || "Untitled"}`}
+          aria-haspopup="menu"
+          aria-expanded={!!menuPos}
+          title="More"
+          onClick={openMenu}
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-opacity hover:bg-ink/10 hover:text-ink group-hover:opacity-100"
+        >
+          <MoreHorizontal size={14} />
+        </button>
       </NavLink>
+      {menuPos &&
+        createPortal(
+          <>
+            <button type="button" aria-label="Close menu" className="fixed inset-0 z-[60] cursor-default" onClick={closeMenu} />
+            <div
+              role="menu"
+              style={{ left: menuPos.left, top: menuPos.top }}
+              className="fixed z-[61] flex w-44 flex-col rounded-lg border border-line bg-surface p-1 text-sm text-ink shadow-lg"
+            >
+              {canAddChild && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-ink/[0.06]"
+                  onClick={(e) => {
+                    closeMenu();
+                    addChild(e);
+                  }}
+                >
+                  <Plus size={14} /> Add page inside
+                </button>
+              )}
+              {confirmDel ? (
+                <div className="flex flex-col gap-1 rounded bg-danger/5 p-1.5">
+                  <span className="px-1 text-xs text-muted">Move to Trash?</span>
+                  <div className="flex gap-1">
+                    <button type="button" className="flex-1 rounded px-2 py-1 text-xs font-medium text-danger hover:bg-danger/10" onClick={doDelete}>
+                      Delete
+                    </button>
+                    <button type="button" className="flex-1 rounded px-2 py-1 text-xs hover:bg-ink/[0.06]" onClick={() => setConfirmDel(false)}>
+                      Keep
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-danger hover:bg-danger/10"
+                  onClick={() => setConfirmDel(true)}
+                >
+                  <Trash2 size={14} /> Delete
+                </button>
+              )}
+            </div>
+          </>,
+          document.body,
+        )}
       {open && canOpen && children.length > 0 && (
         <ul className="flex flex-col gap-px">
           {children.map((c) => (
-            <TreeNode key={c.id} entry={{ id: c.id, title: c.title, icon: c.meta.icon ?? "", kind: c.kind }} depth={depth + 1} />
+            <TreeNode key={c.id} entry={{ id: c.id, title: c.title, icon: c.meta.icon ?? "", kind: c.kind, folder: isFolder(c.meta) }} depth={depth + 1} />
           ))}
         </ul>
       )}
@@ -276,7 +495,7 @@ function TreeNode({ entry, depth }: { entry: { id: string; title: string; icon: 
 }
 
 function EntryLists() {
-  const { data: recent = [] } = useQuery({ queryKey: ["recent"], queryFn: () => store.listRecent(12) });
+  const { data: recent = [] } = useQuery({ queryKey: ["recent"], queryFn: () => store.listRecent(5) });
   const [, rerender] = useState(0);
   useEffect(() => {
     const on = () => rerender((n) => n + 1);

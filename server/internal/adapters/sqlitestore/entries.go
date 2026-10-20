@@ -31,7 +31,7 @@ func (s *Store) GetEntry(ctx context.Context, userID, id string) (model.Entry, e
 // PutEntry runs BACKEND.md §7.3 in one transaction: idempotency check, version
 // check, next server_seq, write, store the response.
 func (s *Store) PutEntry(ctx context.Context, userID string, in core.PutInput) (model.Entry, error) {
-	return s.write(ctx, userID, in.IdemKey, in.RequestHash, func(q *sqlcgen.Queries, now string) (model.Entry, error) {
+	return s.write(ctx, userID, in.IdemKey, in.RequestHash, func(q *sqlcgen.Queries, _ *sql.Tx, now string) (model.Entry, error) {
 		cur, err := q.GetEntryVersion(ctx, sqlcgen.GetEntryVersionParams{ID: in.ID, UserID: userID})
 		exists := err == nil
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -87,9 +87,11 @@ func (s *Store) PutEntry(ctx context.Context, userID string, in core.PutInput) (
 	})
 }
 
-// DeleteEntry turns the entry into a tombstone with its content wiped.
+// DeleteEntry moves the entry to the trash: it sets deleted_at (so it drops
+// out of every live view and syncs as deleted) but KEEPS the content, so it can
+// be restored. PurgeEntry / the 15-day sweep later wipe the content for good.
 func (s *Store) DeleteEntry(ctx context.Context, userID string, in core.DeleteInput) (model.Entry, error) {
-	return s.write(ctx, userID, in.IdemKey, in.RequestHash, func(q *sqlcgen.Queries, now string) (model.Entry, error) {
+	return s.write(ctx, userID, in.IdemKey, in.RequestHash, func(q *sqlcgen.Queries, tx *sql.Tx, now string) (model.Entry, error) {
 		cur, err := q.GetEntryVersion(ctx, sqlcgen.GetEntryVersionParams{ID: in.ID, UserID: userID})
 		if errors.Is(err, sql.ErrNoRows) {
 			return model.Entry{}, core.ErrNotFound
@@ -100,8 +102,75 @@ func (s *Store) DeleteEntry(ctx context.Context, userID string, in core.DeleteIn
 		if int(cur.Version) != in.BaseVersion {
 			return model.Entry{}, s.conflict(ctx, q, userID, in.ID)
 		}
-		if cur.DeletedAt.Valid { // already a tombstone: nothing to change
+		if cur.DeletedAt.Valid { // already in the trash: nothing to change
 			return getIn(ctx, q, userID, in.ID)
+		}
+		seq, err := q.NextSeq(ctx, userID)
+		if err != nil {
+			return model.Entry{}, err
+		}
+		res, err := tx.ExecContext(ctx,
+			`UPDATE entries SET deleted_at = ?, version = version + 1, server_seq = ?, updated_at = ?
+			 WHERE id = ? AND user_id = ? AND version = ?`,
+			now, seq, now, in.ID, userID, in.BaseVersion)
+		if err != nil {
+			return model.Entry{}, err
+		}
+		if n, _ := res.RowsAffected(); n != 1 {
+			return model.Entry{}, s.conflict(ctx, q, userID, in.ID)
+		}
+		return getIn(ctx, q, userID, in.ID)
+	})
+}
+
+// RestoreEntry brings a trashed entry back: it clears deleted_at (the content
+// was kept), so the entry reappears in every view.
+func (s *Store) RestoreEntry(ctx context.Context, userID string, in core.DeleteInput) (model.Entry, error) {
+	return s.write(ctx, userID, in.IdemKey, in.RequestHash, func(q *sqlcgen.Queries, tx *sql.Tx, now string) (model.Entry, error) {
+		cur, err := q.GetEntryVersion(ctx, sqlcgen.GetEntryVersionParams{ID: in.ID, UserID: userID})
+		if errors.Is(err, sql.ErrNoRows) {
+			return model.Entry{}, core.ErrNotFound
+		}
+		if err != nil {
+			return model.Entry{}, err
+		}
+		if int(cur.Version) != in.BaseVersion {
+			return model.Entry{}, s.conflict(ctx, q, userID, in.ID)
+		}
+		if !cur.DeletedAt.Valid { // not in the trash: nothing to change
+			return getIn(ctx, q, userID, in.ID)
+		}
+		seq, err := q.NextSeq(ctx, userID)
+		if err != nil {
+			return model.Entry{}, err
+		}
+		res, err := tx.ExecContext(ctx,
+			`UPDATE entries SET deleted_at = NULL, version = version + 1, server_seq = ?, updated_at = ?
+			 WHERE id = ? AND user_id = ? AND version = ?`,
+			seq, now, in.ID, userID, in.BaseVersion)
+		if err != nil {
+			return model.Entry{}, err
+		}
+		if n, _ := res.RowsAffected(); n != 1 {
+			return model.Entry{}, s.conflict(ctx, q, userID, in.ID)
+		}
+		return getIn(ctx, q, userID, in.ID)
+	})
+}
+
+// PurgeEntry deletes a trashed entry's content for good (an empty tombstone
+// stays so the deletion keeps syncing). This is "delete forever".
+func (s *Store) PurgeEntry(ctx context.Context, userID string, in core.DeleteInput) (model.Entry, error) {
+	return s.write(ctx, userID, in.IdemKey, in.RequestHash, func(q *sqlcgen.Queries, _ *sql.Tx, now string) (model.Entry, error) {
+		cur, err := q.GetEntryVersion(ctx, sqlcgen.GetEntryVersionParams{ID: in.ID, UserID: userID})
+		if errors.Is(err, sql.ErrNoRows) {
+			return model.Entry{}, core.ErrNotFound
+		}
+		if err != nil {
+			return model.Entry{}, err
+		}
+		if int(cur.Version) != in.BaseVersion {
+			return model.Entry{}, s.conflict(ctx, q, userID, in.ID)
 		}
 		seq, err := q.NextSeq(ctx, userID)
 		if err != nil {
@@ -124,6 +193,96 @@ func (s *Store) DeleteEntry(ctx context.Context, userID string, in core.DeleteIn
 	})
 }
 
+// ListTrash returns entries in the trash (deleted but not yet purged: content
+// still present), newest-deleted first.
+func (s *Store) ListTrash(ctx context.Context, userID string, limit int) ([]model.Entry, error) {
+	rows, err := s.reader.QueryContext(ctx,
+		`SELECT id FROM entries
+		 WHERE user_id = ? AND deleted_at IS NOT NULL AND body_text <> ''
+		 ORDER BY deleted_at DESC LIMIT ?`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := make([]model.Entry, 0, len(ids))
+	for _, id := range ids {
+		e, err := s.GetEntry(ctx, userID, id)
+		if err != nil {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
+// PurgeTrashedBefore wipes the content of every entry trashed before cutoff
+// (keeping an empty tombstone), so the trash empties itself. Returns the count.
+func (s *Store) PurgeTrashedBefore(ctx context.Context, cutoff time.Time) (int, error) {
+	tx, err := s.writer.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	q := sqlcgen.New(tx)
+	cut := cutoff.UTC().Format(tsFormat)
+	rows, err := tx.QueryContext(ctx,
+		`SELECT id, user_id, version FROM entries
+		 WHERE deleted_at IS NOT NULL AND deleted_at < ? AND body_text <> ''`, cut)
+	if err != nil {
+		return 0, err
+	}
+	type target struct {
+		id, userID string
+		version    int64
+	}
+	var targets []target
+	for rows.Next() {
+		var t target
+		if err := rows.Scan(&t.id, &t.userID, &t.version); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		targets = append(targets, t)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	now := s.stamp()
+	purged := 0
+	for _, t := range targets {
+		seq, err := q.NextSeq(ctx, t.userID)
+		if err != nil {
+			return purged, err
+		}
+		if _, err := q.TombstoneEntry(ctx, sqlcgen.TombstoneEntryParams{
+			DeletedAt: sql.NullString{String: now, Valid: true}, ServerSeq: seq, UpdatedAt: now,
+			ID: t.id, UserID: t.userID, Version: t.version,
+		}); err != nil {
+			return purged, err
+		}
+		if err := setLinks(ctx, q, t.userID, t.id, nil); err != nil {
+			return purged, err
+		}
+		purged++
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return purged, nil
+}
+
 // setLinks replaces the links an entry points to, inside the write transaction.
 func setLinks(ctx context.Context, q *sqlcgen.Queries, userID, from string, to []string) error {
 	if err := q.DeleteLinksFrom(ctx, sqlcgen.DeleteLinksFromParams{UserID: userID, FromID: from}); err != nil {
@@ -140,7 +299,7 @@ func setLinks(ctx context.Context, q *sqlcgen.Queries, userID, from string, to [
 // write wraps a change in BEGIN IMMEDIATE … COMMIT with the idempotency check
 // before it and the stored response after it.
 func (s *Store) write(ctx context.Context, userID, idemKey string, hash [32]byte,
-	fn func(q *sqlcgen.Queries, now string) (model.Entry, error)) (model.Entry, error) {
+	fn func(q *sqlcgen.Queries, tx *sql.Tx, now string) (model.Entry, error)) (model.Entry, error) {
 	tx, err := s.writer.BeginTx(ctx, nil)
 	if err != nil {
 		return model.Entry{}, err
@@ -165,7 +324,7 @@ func (s *Store) write(ctx context.Context, userID, idemKey string, hash [32]byte
 		}
 	}
 
-	e, err := fn(q, now)
+	e, err := fn(q, tx, now)
 	if err != nil {
 		return model.Entry{}, err
 	}

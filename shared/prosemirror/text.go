@@ -70,6 +70,11 @@ func walk(b *strings.Builder, n node) {
 			b.WriteString(alt + "\n")
 		}
 		return
+	case "fileAttachment":
+		if name := n.attr("name"); name != "" {
+			b.WriteString(name + "\n")
+		}
+		return
 	}
 	inline := false
 	for _, c := range n.Content {
@@ -106,7 +111,8 @@ func ExtractLinks(body json.RawMessage) []string {
 	return sorted(seen)
 }
 
-// ExtractImages returns the hashes of diary-stored images in the document.
+// ExtractImages returns the hashes of diary-stored blobs in the document:
+// inline images and file attachments alike (both live under /v1/blobs/).
 func ExtractImages(body json.RawMessage) []string {
 	doc, ok := parse(body)
 	if !ok {
@@ -114,7 +120,8 @@ func ExtractImages(body json.RawMessage) []string {
 	}
 	seen := map[string]bool{}
 	visit(doc, func(n node) {
-		if n.Type == "image" {
+		switch n.Type {
+		case "image", "fileAttachment":
 			if h := BlobHash(n.attr("src")); h != "" {
 				seen[h] = true
 			}

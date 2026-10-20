@@ -263,7 +263,12 @@ func (s *GitLabService) sync(ctx context.Context, userID string, in Integration,
 			continue
 		}
 		if err := s.api.SetIssueState(ctx, cfg.URL, in.RefreshToken, meta.GitLab.ProjectID, meta.GitLab.IID, wantClosed); err != nil {
-			return res, err
+			if errors.Is(err, ErrGrantRevoked) {
+				return res, err
+			}
+			// A read-only token (read_api) can't change issue state; leave GitLab
+			// untouched and carry on so the pull below still runs.
+			continue
 		}
 		meta.GitLab.State = map[bool]string{true: "closed", false: "opened"}[wantClosed]
 		if e, err := s.writeMeta(ctx, userID, r, meta); err == nil {
@@ -470,6 +475,29 @@ func (s *GitLabService) addOptions(ctx context.Context, userID string, db model.
 			want[glLabels][optionID("l", l)] = l
 		}
 	}
+	// Option ids currently referenced by records must never be pruned, even
+	// though this pull may be incremental and not mention every project/label.
+	// Stale options self-heal: once a record is re-synced to the new value, the
+	// old id falls out of use and the next sync drops it.
+	inUse := map[string]bool{}
+	if records, err := s.store.ListChildren(ctx, userID, db.ID); err == nil {
+		for _, r := range records {
+			var m recordMeta
+			if json.Unmarshal(r.Meta, &m) != nil {
+				continue
+			}
+			var proj string
+			if json.Unmarshal(m.Props[glProject], &proj) == nil && proj != "" {
+				inUse[proj] = true
+			}
+			var labels []string
+			if json.Unmarshal(m.Props[glLabels], &labels) == nil {
+				for _, l := range labels {
+					inUse[l] = true
+				}
+			}
+		}
+	}
 	colors := []string{"blue", "green", "orange", "purple", "pink", "yellow", "brown", "red", "gray"}
 	changed := false
 	for _, p := range schema.Properties {
@@ -479,12 +507,24 @@ func (s *GitLabService) addOptions(ctx context.Context, userID string, db model.
 			continue
 		}
 		opts, _ := p["options"].([]any)
+		// Keep only options GitLab still reports; drop stale ones (e.g. an old
+		// "group/project" value left over after we switched to the short name).
 		have := map[string]bool{}
+		kept := make([]any, 0, len(opts))
 		for _, o := range opts {
-			if m, ok := o.(map[string]any); ok {
-				have[fmt.Sprint(m["id"])] = true
+			m, ok := o.(map[string]any)
+			if !ok {
+				continue
 			}
+			oid := fmt.Sprint(m["id"])
+			if _, keep := names[oid]; !keep && !inUse[oid] {
+				changed = true
+				continue
+			}
+			have[oid] = true
+			kept = append(kept, o)
 		}
+		opts = kept
 		ids := make([]string, 0, len(names))
 		for oid := range names {
 			ids = append(ids, oid)
